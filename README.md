@@ -4,9 +4,9 @@ Android 本地截图预处理工具，Kotlin + Compose，Android 9（API 28）�
 
 ## 下载 APK
 
-[下载 v0.1.0 APK](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/download/v0.1.0/GPT-Screenshot-Pack-0.1.0-debug.apk) · [Release 页面](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/tag/v0.1.0)
+[下载 v0.1.0 APK](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/raw/refs/tags/v0.1.0/downloads/GPT-Screenshot-Pack-0.1.0-debug.apk) · [Release 页面](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/tag/v0.1.0)
 
-APK 使用开发签名，适合个人安装测试。Release 同时附源码 ZIP 和 SHA256SUMS.txt。源码、构建验证和公开 API 差异见下文；实机验证尚未完成。
+APK 使用开发签名，适合个人安装测试。Release 页面同时提供源码 ZIP 和 SHA256SUMS.txt 的下载链接，文件保存在仓库 downloads 目录。源码、构建验证和公开 API 差异见下文；实机验证尚未完成。
 
 ## 使用
 
