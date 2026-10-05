@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.gptscreenshotpack.core.PackRulesTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-05T06:55:23.749Z" hostname="58f1db63e923" time="0.359">
+<testsuite name="com.gptscreenshotpack.core.PackRulesTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-05T07:59:23.474Z" hostname="58f1db63e923" time="0.378">
   <properties/>
-  <testcase name="storedZipUsesTwoStreamingPassesAndClosesEachInput" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.244"/>
-  <testcase name="rejectsEmptyOrNonImageZipAndRemovesCancelledZip" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.014"/>
+  <testcase name="deflatedZipUsesTwoStreamingPassesAndClosesEachInput" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.192"/>
+  <testcase name="rejectsEmptyOrNonImageZipAndRemovesCancelledZip" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.01"/>
   <testcase name="cancellationDuringCrcAndPayloadRemovesPartialFile" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.012"/>
-  <testcase name="slicesAreBalancedOrderedAndCoverImage" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.002"/>
-  <testcase name="qualityAndScalePresetsKeepRequestedValues" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.033"/>
-  <testcase name="defaultsAndLongScreenshot" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.002"/>
-  <testcase name="changedInputCrcIsRejectedAndStreamsAreClosed" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.004"/>
-  <testcase name="zipContainsOnlyOrderedImagesAndDoesNotModifyInputs" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.012"/>
-  <testcase name="namingPreservesUnicodeAndTimeAndHandlesAllCollisions" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.031"/>
+  <testcase name="slicesAreBalancedOrderedAndCoverImage" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.005"/>
+  <testcase name="qualityAndScalePresetsKeepRequestedValues" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.002"/>
+  <testcase name="defaultsAndLongScreenshot" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.003"/>
+  <testcase name="deflatedZipUsesBestSpeedRatherThanDefaultCompression" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.054"/>
+  <testcase name="changedInputCrcIsRejectedAndStreamsAreClosed" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.005"/>
+  <testcase name="zipContainsOnlyOrderedImagesAndDoesNotModifyInputs" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.013"/>
+  <testcase name="namingPreservesUnicodeAndTimeAndHandlesAllCollisions" classname="com.gptscreenshotpack.core.PackRulesTest" time="0.072"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

@@ -16,8 +16,8 @@
 > Task :app:extractDeepLinksDebug UP-TO-DATE
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
-> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:processDebugManifestForPackage
 > Task :app:mergeDebugShaders UP-TO-DATE
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
@@ -62,48 +62,44 @@
 > Task :app:generateReleaseAssets UP-TO-DATE
 > Task :app:mergeReleaseAssets UP-TO-DATE
 > Task :app:compressReleaseAssets UP-TO-DATE
-> Task :app:extractReleaseVersionControlInfo
-> Task :app:extractProguardFiles UP-TO-DATE
-> Task :app:collectReleaseDependencies UP-TO-DATE
-> Task :app:sdkReleaseDependencyData UP-TO-DATE
-> Task :app:writeReleaseAppMetadata UP-TO-DATE
-> Task :app:writeReleaseSigningConfigVersions UP-TO-DATE
-> Task :app:preDebugAndroidTestBuild SKIPPED
-> Task :app:generateDebugAndroidTestResValues UP-TO-DATE
-> Task :app:preDebugUnitTestBuild UP-TO-DATE
-> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
-> Task :app:preReleaseUnitTestBuild UP-TO-DATE
-> Task :app:javaPreCompileReleaseUnitTest UP-TO-DATE
 > Task :app:processDebugResources
-> Task :app:processDebugAndroidTestManifest UP-TO-DATE
+> Task :app:extractReleaseVersionControlInfo
 > Task :app:compileReleaseNavigationResources UP-TO-DATE
 > Task :app:mergeReleaseResources UP-TO-DATE
 > Task :app:packageReleaseResources UP-TO-DATE
 > Task :app:parseReleaseLocalResources UP-TO-DATE
 > Task :app:processReleaseResources
-> Task :app:compileReleaseKotlin
 > Task :app:compileDebugKotlin
-> Task :app:compileReleaseJavaWithJavac
 > Task :app:compileDebugJavaWithJavac
+> Task :app:compileReleaseKotlin
 > Task :app:dexBuilderDebug
 > Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
-> Task :app:processDebugJavaRes
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
 > Task :app:mergeProjectDexDebug
-> Task :app:mergeDebugJavaResource
+> Task :app:compileReleaseJavaWithJavac
 > Task :app:dexBuilderRelease
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
 > Task :app:mergeReleaseGlobalSynthetics UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
 > Task :app:generateReleaseLintVitalReportModel
 > Task :app:mergeDexRelease
 > Task :app:compileReleaseArtProfile
-> Task :app:processReleaseJavaRes
-> Task :app:mergeReleaseJavaResource
+> Task :app:processReleaseJavaRes UP-TO-DATE
+> Task :app:mergeReleaseJavaResource UP-TO-DATE
 > Task :app:optimizeReleaseResources
+> Task :app:collectReleaseDependencies UP-TO-DATE
+> Task :app:sdkReleaseDependencyData UP-TO-DATE
+> Task :app:writeReleaseAppMetadata UP-TO-DATE
+> Task :app:writeReleaseSigningConfigVersions UP-TO-DATE
 > Task :app:bundleDebugClassesToCompileJar
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:generateDebugAndroidTestResValues UP-TO-DATE
 > Task :app:generateDebugAndroidTestLintModel
 > Task :app:generateDebugLintReportModel
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
 > Task :app:generateDebugUnitTestLintModel
 > Task :app:lintVitalAnalyzeRelease
 > Task :app:lintVitalReportRelease SKIPPED
@@ -116,14 +112,19 @@
 > Task :app:lintAnalyzeDebugUnitTest
 > Task :app:bundleDebugClassesToRuntimeJar
 > Task :app:compileDebugUnitTestKotlin
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
 > Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
 > Task :app:processDebugUnitTestJavaRes UP-TO-DATE
-> Task :app:lintAnalyzeDebug
 > Task :app:testDebugUnitTest
 > Task :app:bundleReleaseClassesToRuntimeJar
+> Task :app:bundleReleaseClassesToCompileJar
+> Task :app:lintAnalyzeDebug
 > Task :app:lintReportDebug
 > Task :app:lintDebug
 > Task :app:lint
+> Task :app:preReleaseUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileReleaseUnitTest UP-TO-DATE
+> Task :app:processDebugAndroidTestManifest UP-TO-DATE
 > Task :app:generateDebugAndroidTestBuildConfig UP-TO-DATE
 > Task :app:checkDebugAndroidTestAarMetadata UP-TO-DATE
 > Task :app:processDebugAndroidTestNavigationResources UP-TO-DATE
@@ -131,7 +132,6 @@
 > Task :app:mapDebugAndroidTestSourceSetPaths UP-TO-DATE
 > Task :app:generateDebugAndroidTestResources UP-TO-DATE
 > Task :app:mergeDebugAndroidTestResources UP-TO-DATE
-> Task :app:bundleReleaseClassesToCompileJar
 > Task :app:processDebugAndroidTestResources UP-TO-DATE
 > Task :app:compileReleaseUnitTestKotlin
 > Task :app:compileReleaseUnitTestJavaWithJavac NO-SOURCE
@@ -166,5 +166,5 @@
 > Task :app:createDebugAndroidTestApkListingFileRedirect UP-TO-DATE
 > Task :app:assembleDebugAndroidTest
 
-BUILD SUCCESSFUL in 40s
-138 actionable tasks: 53 executed, 85 up-to-date
+BUILD SUCCESSFUL in 32s
+138 actionable tasks: 49 executed, 89 up-to-date

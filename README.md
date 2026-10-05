@@ -4,23 +4,24 @@ Android 本地截图预处理工具，Kotlin + Compose，Android 9（API 28）�
 
 ## 下载 APK
 
-[下载 v0.4.0 APK](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/download/v0.4.0/GPT-Screenshot-Pack-0.4.0-debug.apk) · [Release 页面](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/tag/v0.4.0)
+[下载 v0.5.0 APK](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/download/v0.5.0/GPT-Screenshot-Pack-0.5.0-debug.apk) · [Release 页面](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/tag/v0.5.0)
 
 APK 使用开发签名，适合个人安装测试；继续使用 0.1.0 构建时的同一 debug keystore，支持覆盖安装。本项目尚无 release signing 配置。APK 作为 Release Asset 发布，同时提供源码 ZIP 和 SHA-256 校验文件。源码、构建验证和公开 API 差异见下文；实机验证尚未完成。
 
 ## 使用
 
 - 相册按顺序选择图片 → Android 分享菜单 → GPT Screenshot Pack → **设置小窗 → 处理图片 → 生成 ZIP → 保存 → 自动关闭并返回来源 App**。继续使用独立的透明 `ShareActivity`，不进入正常主界面，也不自动打开系统 Sharesheet。
-- 设置小窗包含 ZIP 名称主体、**自动附加日期时间**及两个分辨率模式。自动补 `.zip`；输入已有 `.zip`（不区分大小写）会去除再补，避免重复扩展名。日期开关默认开启，以手机本地时间在确认时生成 `yyyyMMdd_HHmmss`，例如 `聊天记录_20261005_132530.zip`。确认后通过现有 DataStore 一次保存主体、日期开关和分辨率模式，下次分享继续使用；取消不覆盖上次确认的设置。
+- 设置小窗包含 ZIP 名称主体、**自动附加日期时间**、**HEIC / JPEG / PNG 输出格式**及两个分辨率模式。自动补 `.zip`；输入已有 `.zip`（不区分大小写）会去除再补，避免重复扩展名。日期开关默认开启，以手机本地时间在确认时生成 `yyyyMMdd_HHmmss`，例如 `聊天记录_20261005_132530.zip`。确认后通过现有 DataStore 一次保存主体、日期开关、格式和模式，下次分享继续使用；取消不覆盖上次确认的设置。
 - 首次名称主体为 `GPT_Screenshots`。空白、路径分隔符、控制字符及常见非法文件名字符会提示修改；主体最多 200 个 UTF-8 字节，保留时间和重名后缀空间。同名 ZIP 追加 `_copy2` 等，不覆盖旧文件。
 - **原始分辨率**：保留更多图像细节，但 GPT 处理时可能产生更多图像分割。直接使用输入宽高，不应用保存的缩放比例；首次没有模式偏好时使用这一模式。
 - **降低分辨率**：提高识别速度，减少图像分割。使用主界面的**降低分辨率比例**。原有 `scale` 偏好及 33 / 50 / 60 / 67 / 75 / 100 快捷值保留，范围仍为 25%～100%，缺省比例仍为 100%；若设为 100%，尺寸与原图相同，小窗会提示这一点。
 - 桌面主界面也可选择这两个模式，手动测试遵守同一规则，并同步显示最后确认的分享模式。调整降低分辨率比例不会改变原始模式的输入尺寸。
-- 桌面入口可选 HEIC/PNG/JPEG，独立保存 HEIC/JPEG 质量（范围 1～100）；新安装或质量键缺失时 HEIC 使用 **85**，JPEG 使用 **95**，快捷值仍为 **50 / 75 / 85 / 90 / 95 / 100**。PNG 不显示质量参数。升级不强制改写已保存的质量值，也不重置格式、比例或编码器/CQ/诊断；分享模式保存只更新对应的三个偏好键。
+- 输出格式仅在每次分享的小窗选择；没有记录时默认 **HEIC**，已有 `format` 偏好沿用，主界面不再提供格式按钮，也不写这个偏好。桌面测试继续使用最近确认的分享格式，主界面只显示该格式说明。
+- 主界面分别保留 HEIC、JPEG 的长期质量设置（范围 1～100）；新安装或质量键缺失时 HEIC 使用 **85**，JPEG 使用 **95**，两组快捷值仍为 **50 / 75 / 85 / 90 / 95 / 100**。分享小窗不显示质量控制；PNG 无有损质量参数。升级不重置已有质量、比例或编码器/CQ/诊断；分享确认只更新名称、日期、模式、格式四个偏好键。
 - HEIC 失败（含输出无法再次解码）时自动回退 PNG；主界面结果页显示实际回退文件和原因。单张失败跳过，有可用图片时保存 ZIP 并退出，提示成功/失败数量及 PNG 回退。全部失败不生成 ZIP，分享窗口保留错误提示，可重新命名重试或关闭。
 - 最终任一边超过 16384 px 时均匀切片，超限边的片尺寸目标 ≤12000 px。双边超限采用从上到下、从左到右的网格顺序。1440×19399 在原始模式均匀分成两片，即使保存的降低比例是 50%；选择降低模式且比例为 50% 时变成 720×9700，不切片。GPT 接收后的图像分割策略不由本应用控制。
 - 文件保留名称主体和时间，增加 `resized_`，切片 `_1`、`_2`，重名 `_copy2`、`_copy3`。ZIP 只含处理后的图片，按输入和切片顺序写入，无辅助文本。
-- 分享 ZIP 使用确认后的名称和日期开关；桌面手动测试仍用 `GPT_Screenshots_yyyyMMdd_HHmmss.zip`。同名不覆盖旧文件；100% 时也继续保留 `resized_` 图片前缀。ZIP 每项使用 **ZipEntry.STORED**，不执行 DEFLATE，设置 size = compressedSize 和 CRC32；每张图片用 64 KiB 缓冲读两遍，不把整个文件读入内存。
+- 分享 ZIP 使用确认后的名称和日期开关；桌面手动测试仍用 `GPT_Screenshots_yyyyMMdd_HHmmss.zip`。同名不覆盖旧文件；100% 时也继续保留 `resized_` 图片前缀。ZIP 每项改为 **ZipEntry.DEFLATED**，使用 **Deflater.BEST_SPEED（等级 1）**。仍以 64 KiB 缓冲流式读取：先预校验 size/CRC，再压缩写入并核对实际输入，压缩大小由 ZIP 写入器计算，不再假定等于原大小，不把整个文件读入内存。
 
 ## 公共 Downloads
 
@@ -68,8 +69,8 @@ Download/GPT Screenshot Pack/
 1. 核查真实 API 和依赖版本，确定稳定版功能边界。
 2. 建立 Gradle/Kotlin/Compose 工程及无网络权限清单。
 3. 实现 `core/PackRules.kt`：默认参数、缩放、切片、保名重名、流式 ZIP。
-4. `PackProcessor.kt` / `PackStorage.kt`：逐张/逐片 ImageDecoder → 编码 → 验证 → STORED ZIP → 公共 Output，资源释放、取消、fallback 和独立清理。
-5. DataStore 保存图像设置、ZIP 命名和分辨率模式；ShareActivity / ShareViewModel 独立接收与小窗设置，MainActivity / PackViewModel 保留桌面设置、手动结果分享和 MediaCodec 能力诊断。
+4. `PackProcessor.kt` / `PackStorage.kt`：逐张/逐片 ImageDecoder → 编码 → 验证 → BEST_SPEED DEFLATED ZIP → 公共 Output，资源释放、取消、fallback 和独立清理。
+5. DataStore 保存长期图像参数与 ZIP 名称/日期/格式/模式；ShareActivity / ShareViewModel 独立接收与小窗设置，MainActivity / PackViewModel 保留长期参数、测试、手动结果分享和 MediaCodec 能力诊断，不写任务格式。
 6. 运行构建、测试、lint 修复并生成 APK；实机验收单独记录，未运行的不宣称通过。
 
 后续比例、质量、阈值、切片和命名主要修改 core；编码器选择与 CQ 待稳定版接口可用后集中修改编码层。
@@ -89,13 +90,13 @@ Download/GPT Screenshot Pack/
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-单元测试覆盖 HEIC 缺省 85 / JPEG 95、原始模式忽略所有降低比例、降低模式使用保存比例及先定尺寸再切片、切换模式保留质量和格式，以及原有缩放快捷值、16384 阈值、双轴切片、保名重名、ZIP 顺序/内容/size/CRC/STORED、10 MiB 流式输入与句柄关闭、输入变化导致 CRC 拒绝、取消、ZIP 名称/日期/非法名称。设备测试保留 HEIC 往返、PNG/长图/50 张/切片、公共文件及清理、分享路由，并检查小窗模式/名称/日期旋转保持、下次记忆、50% 的真实 8×12 输出与原始模式的 16×24 输出、已有质量不变、自动关闭和错误窗口。HEIC 设备测试要求真正生成 HEIC，PNG fallback 不算通过。
+单元测试覆盖 DEFLATED / BEST_SPEED（与默认压缩等级不同的参考压缩结果比较）、ZipFile / ZipInputStream 两种读取方式、图片顺序/内容/CRC/大小、10 MiB 有界流和句柄关闭、输入变化拒绝、取消以及现有默认质量/比例/切片/命名。设备测试保留 HEIC 往返、PNG/长图/50 张/切片、公共文件及清理、分享路由，并检查格式默认值/选择/旋转保持/下次记忆/取消、主界面不能改写格式、PNG/JPEG 的实际输出、模式/名称/日期记忆、已有质量不变、自动关闭和错误窗口。HEIC 设备测试要求真正生成 HEIC，PNG fallback 不算通过。
 
 Lint 使用 `abortOnError=true` 与 `warningsAsErrors=true`，不使用 baseline。`app/lint.xml` 仅忽略 `GradleDependency` / `AndroidGradlePluginVersion` 两类“存在更新版本”的建议；这是对固定 API 36 工具链/依赖的显式选择，不关闭 API、安全、资源或代码正确性检查。较新的 Activity/Lifecycle/Core/Compose 版本存在，本版不要求追随最新依赖；HeifWriter 已特别核查并使用最新稳定版 1.1.0。Android 12+ 的云备份/设备迁移排除规则已显式配置。
 
 ## 验收状态
 
-0.4.0 的最终 build / test / lint 验证结果见 [VALIDATION.md](VALIDATION.md) 及 `verification/`：Gradle build 成功，Debug/Release 各 17 个单元测试全部通过，lint 报告 No issues found；6 个设备测试已编译，但当前环境没有实机/可用模拟器，未执行。
+0.5.0 的最终 build / test / lint 验证结果见 [VALIDATION.md](VALIDATION.md) 及 `verification/`：Gradle build 成功，Debug/Release 各 18 个单元测试全部通过，lint 报告 No issues found；6 个设备测试已编译，因无设备/可用模拟器未执行。ChatGPT 接收兼容性、真实小窗和 HEIC 行为仍需实机验证。
 
 记录见 `verification/` 和 [VALIDATION.md](VALIDATION.md)。可安装 Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`；源码交付包不包含 build 输出、SDK、本机代理或 local.properties。
 

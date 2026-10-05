@@ -11,6 +11,10 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.io.InputStream
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.zip.Deflater
+import java.util.zip.DeflaterOutputStream
+import java.util.zip.ZipInputStream
 
 class PackRulesTest {
     @get:Rule val temporary = TemporaryFolder()
@@ -80,16 +84,26 @@ class PackRulesTest {
             assertEquals(files.map { it.name }, archive.entries().asSequence().map { it.name }.toList())
             files.forEach { file ->
                 val entry = archive.getEntry(file.name)
-                assertEquals(ZipEntry.STORED, entry.method)
+                assertEquals(ZipEntry.DEFLATED, entry.method)
                 assertEquals(file.length(), entry.size)
-                assertEquals(entry.size, entry.compressedSize)
+                assertTrue(entry.compressedSize > 0)
                 assertEquals(CRC32().apply { update(file.readBytes()) }.value, entry.crc)
                 assertArrayEquals(file.readBytes(), archive.getInputStream(entry).use { it.readBytes() })
             }
         }
+        ZipInputStream(zip.inputStream()).use { stream ->
+            files.forEach { file ->
+                val entry = checkNotNull(stream.nextEntry)
+                assertEquals(file.name, entry.name)
+                assertEquals(ZipEntry.DEFLATED, entry.method)
+                assertArrayEquals(file.readBytes(), stream.readBytes())
+                stream.closeEntry()
+            }
+            assertNull(stream.nextEntry)
+        }
         assertArrayEquals(byteArrayOf(0, 42), files[0].readBytes())
     }
-    @Test fun storedZipUsesTwoStreamingPassesAndClosesEachInput() {
+    @Test fun deflatedZipUsesTwoStreamingPassesAndClosesEachInput() {
         val length = 10L * 1024 * 1024 + 17
         var opens = 0
         var closes = 0
@@ -116,9 +130,31 @@ class PackRulesTest {
         ZipFile(zip).use {
             val entry = it.entries().nextElement()
             assertEquals(length, entry.size)
-            assertEquals(length, entry.compressedSize)
-            assertEquals(ZipEntry.STORED, entry.method)
+            assertTrue(entry.compressedSize > 0 && entry.compressedSize < length)
+            assertEquals(ZipEntry.DEFLATED, entry.method)
             assertEquals(length, it.getInputStream(entry).use { input -> input.copyTo(java.io.OutputStream.nullOutputStream()) })
+        }
+    }
+    @Test fun deflatedZipUsesBestSpeedRatherThanDefaultCompression() {
+        val bytes = ByteArray(256 * 1024) { ((it / 1024) % 16).toByte() }
+        fun compressedSize(level: Int): Long {
+            val deflater = Deflater(level, true)
+            try {
+                val output = ByteArrayOutputStream()
+                DeflaterOutputStream(output, deflater).use { it.write(bytes) }
+                return output.size().toLong()
+            } finally { deflater.end() }
+        }
+        val expected = compressedSize(Deflater.BEST_SPEED)
+        assertNotEquals("Fixture must distinguish speed from default compression", expected, compressedSize(Deflater.DEFAULT_COMPRESSION))
+        val file = temporary.newFile("pattern.png").apply { writeBytes(bytes) }
+        val archive = File(temporary.newFolder(), "best-speed.zip")
+        ImageZip.write(listOf(file), archive)
+        ZipFile(archive).use { zip ->
+            val entry = zip.getEntry(file.name)
+            assertEquals(ZipEntry.DEFLATED, entry.method)
+            assertEquals(expected, entry.compressedSize)
+            assertArrayEquals(bytes, zip.getInputStream(entry).use { it.readBytes() })
         }
     }
     @Test fun changedInputCrcIsRejectedAndStreamsAreClosed() {

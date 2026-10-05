@@ -95,18 +95,13 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
                             enabled = enabled, contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text("$value") }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutputFormat.entries.forEach { format ->
-                        FilterChip(selected = settings.format == format, onClick = { model.setSettings(settings.copy(format = format)) },
-                            label = { Text(format.name) }, enabled = enabled)
-                    }
-                }
-                if (settings.format != OutputFormat.PNG) {
-                    Text("${settings.format} 质量：${settings.quality}")
+                listOf(OutputFormat.HEIC, OutputFormat.JPEG).forEach { format ->
+                    val currentQuality = if (format == OutputFormat.HEIC) settings.heicQuality else settings.jpegQuality
+                    Text("$format 质量：$currentQuality")
                     fun quality(value: Int) {
-                        model.setSettings(if (settings.format == OutputFormat.HEIC) settings.copy(heicQuality = value) else settings.copy(jpegQuality = value))
+                        model.setSettings(if (format == OutputFormat.HEIC) settings.copy(heicQuality = value) else settings.copy(jpegQuality = value))
                     }
-                    Slider(value = settings.quality.toFloat(), onValueChange = { quality(it.roundToInt()) },
+                    Slider(value = currentQuality.toFloat(), onValueChange = { quality(it.roundToInt()) },
                         valueRange = 1f..100f, steps = 98, enabled = enabled)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         PackPresets.qualities.forEach { q ->
@@ -117,6 +112,7 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
                 }
                 Text("编码器：自动 · CQ：自动 · Grid：自动")
                 Text("最终尺寸超过 16384 px 自动均匀切片\n文件名前缀：resized_\nHEIC 编码失败时回退 PNG", style = MaterialTheme.typography.bodySmall)
+                Text("输出格式在分享小窗选择；桌面测试使用最近选择：${settings.format}", style = MaterialTheme.typography.bodySmall)
                 Button(onClick = { picker.launch(arrayOf("image/*")) }, enabled = enabled) { Text("选择图片并测试") }
                 state.result?.let { result ->
                     HorizontalDivider()
@@ -138,7 +134,7 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
                 OutlinedButton(onClick = { diagnosticPage = true; model.diagnostics() }) { Text("编码器信息") }
                 OutlinedButton(onClick = { confirmCleanOutput = false }, enabled = enabled) { Text("清理临时文件") }
                 OutlinedButton(onClick = { confirmCleanOutput = true }, enabled = enabled) { Text("清理生成文件") }
-                Text("公共输出目录：${PackStorage.OUTPUT_PATH}\n在 ChatGPT 上传文件时，从“下载”进入 GPT Screenshot Pack → Output 选择 ZIP。\nTemp 过期 24 小时可在启动时清理；Output 永不自动删除。ZIP 仅存放图片，不再压缩。\n全部处理在本地完成，不申请网络权限。\n${BuildConfig.VERSION_NAME} · Android 9+", style = MaterialTheme.typography.bodySmall)
+                Text("公共输出目录：${PackStorage.OUTPUT_PATH}\n在 ChatGPT 上传文件时，从“下载”进入 GPT Screenshot Pack → Output 选择 ZIP。\nTemp 过期 24 小时可在启动时清理；Output 永不自动删除。ZIP 仅存放图片，使用 DEFLATED 最快压缩。\n全部处理在本地完成，不申请网络权限。\n${BuildConfig.VERSION_NAME} · Android 9+", style = MaterialTheme.typography.bodySmall)
             }
         }
     }

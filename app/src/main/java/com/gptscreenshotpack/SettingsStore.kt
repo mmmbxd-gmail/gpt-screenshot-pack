@@ -35,10 +35,11 @@ class SettingsStore(context: Context) {
         val naming = value.validated()
         store.edit { it[zipBase] = naming.base; it[zipDateTime] = naming.appendDateTime }
     }
-    suspend fun saveShareOptions(value: ZipNaming, resolutionMode: ResolutionMode) {
+    suspend fun saveShareOptions(value: ZipNaming, resolutionMode: ResolutionMode, outputFormat: OutputFormat) {
         val naming = value.validated()
-        // Only these three preferences change; saved quality, scale and any other keys are preserved.
-        store.edit { it[zipBase] = naming.base; it[zipDateTime] = naming.appendDateTime; it[mode] = resolutionMode.name }
+        // Reuse the existing format key; main-window saves never write this task preference.
+        store.edit { it[zipBase] = naming.base; it[zipDateTime] = naming.appendDateTime
+            it[mode] = resolutionMode.name; it[format] = outputFormat.name }
     }
     val settings = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map {
         PackSettings((it[scale] ?: defaults.scalePercent).coerceIn(25, 100),
@@ -46,9 +47,9 @@ class SettingsStore(context: Context) {
             (it[heic] ?: defaults.heicQuality).coerceIn(1, 100), (it[jpeg] ?: defaults.jpegQuality).coerceIn(1, 100),
             ResolutionMode.entries.firstOrNull { m -> m.name == it[mode] } ?: defaults.resolutionMode)
     }
-    val resolutionMode = settings.map { it.resolutionMode }.distinctUntilChanged()
+    val taskOptions = settings.map { it.resolutionMode to it.format }.distinctUntilChanged()
     suspend fun save(value: PackSettings) {
-        store.edit { it[scale] = value.scalePercent; it[format] = value.format.name
+        store.edit { it[scale] = value.scalePercent
             it[heic] = value.heicQuality; it[jpeg] = value.jpegQuality; it[mode] = value.resolutionMode.name }
     }
 }

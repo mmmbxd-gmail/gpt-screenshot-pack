@@ -1,12 +1,12 @@
 # GPT Screenshot Pack
 
-> 当前规格版本：0.4.0（2026-10-05）。在既有 Android 项目上迭代：HEIC 缺省质量 85、独立分享设置小窗与分辨率模式、保存 ZIP 后退出。保留公共 Downloads、STORED ZIP 和独立清理。公开 API 差异继续以 README 为准。
+> 当前规格版本：0.5.0（2026-10-05）。在既有 Android 项目上迭代：DEFLATED/BEST_SPEED ZIP、独立分享小窗选择并记住输出格式。保留 HEIC 缺省质量 85、分辨率模式、公共 Downloads、保存后退出和独立清理。公开 API 差异继续以 README 为准。
 
 ## 1. 项目目标
 
 开发一个个人使用的 Android 图片预处理工具，主要用于：
 
-**手机截图 → 保留分辨率（默认 100%，可选缩放）→ HEIC 编码 → STORED ZIP → 公共 Downloads / 分享至 ChatGPT**
+**手机截图 → 分享设置小窗（名称/日期/格式/分辨率）→ 图片编码 → BEST_SPEED DEFLATED ZIP → 公共 Downloads → 返回来源 App**
 
 主要目的：
 
@@ -67,7 +67,7 @@
 相册多选截图
 → 分享
 → GPT Screenshot Pack
-→ 设置小窗（ZIP 名称、日期开关、分辨率模式）
+→ 设置小窗（ZIP 名称、日期开关、HEIC/JPEG/PNG 格式、分辨率模式）
 → 使用保存的图像设置处理
 → 保存 ZIP 到公共 Output
 → 自动关闭分享 Activity，返回来源 App
@@ -77,7 +77,7 @@
 
 - 默认直接使用上次保存的设置；
 - 不进入正常主界面、不要求每次确认图像参数；
-- 先确认 ZIP 名称主体、日期开关和分辨率模式，再显示简洁处理进度；
+- 先确认 ZIP 名称主体、日期开关、输出格式和分辨率模式，再显示简洁处理进度；
 - 成功保存 ZIP 后提示实际名称并自动关闭，不打开系统 Sharesheet；全部失败则显示错误，不生成空 ZIP。
 - `ACTION_SEND` / `ACTION_SEND_MULTIPLE` 由独立 ShareActivity 接收，桌面 MAIN/LAUNCHER 继续由 MainActivity 接收。
 
@@ -191,6 +191,8 @@
 ---
 
 ## 7. 输出格式
+
+格式由每次分享小窗选择并记住上一次确认值，不再由主界面决定。无记录时默认 HEIC，已有 `format` 偏好沿用，不无故覆盖。主界面不提供格式选择、不写这个偏好，桌面测试使用最近确认的分享格式。
 
 支持：
 
@@ -695,7 +697,7 @@ GPT_Screenshots_20261005_013022.zip
 
 ZIP 中的文件顺序应尽量保持原分享输入顺序。
 
-每项图片必须采用 `ZipEntry.STORED`：size 与 compressedSize 相等，预先流式计算 CRC32，再流式写入；不使用 DEFLATE，不把整张编码文件读入内存。ZIP 只作为图片容器。
+每项图片必须采用 `ZipEntry.DEFLATED`，压缩等级为 `Deflater.BEST_SPEED`（等级 1）。继续采用 64 KiB 有界缓冲双遍流式处理：先计算未压缩 size/CRC32，再压缩写入并显式检查读取内容未改变。压缩大小由 ZipOutputStream 计算，不能设为未压缩大小。禁止将整张编码文件读入内存，禁止加入任何辅助文件。
 
 ---
 
@@ -841,6 +843,7 @@ Download/GPT Screenshot Pack/
 [聊天记录]
 [开启] 自动附加日期时间
 自动补 .zip；日期格式 yyyyMMdd_HHmmss
+[HEIC] [JPEG] [PNG]
 [选中] 原始分辨率
 保留更多图像细节，但 GPT 处理时可能产生更多图像分割。
 [未选] 降低分辨率
@@ -875,8 +878,10 @@ GPT Screenshot Pack
 图片处理
 分辨率模式        原始分辨率
 降低分辨率比例    100%（仅降低模式生效）
-输出格式          HEIC
 HEIC 质量         85
+JPEG 质量         95
+两组长期质量快捷值 50/75/85/90/95/100
+输出格式          仅在分享小窗选择，桌面测试沿用最近选择
 
 编码
 编码器            自动
@@ -1021,7 +1026,7 @@ HEIC 100
 
 必须至少验证：
 
-1. 单张 JPG → 默认保持分辨率（或所选缩放）→ HEIC → STORED ZIP 成功。
+1. 单张 JPG → 默认保持分辨率（或所选缩放）→ HEIC → BEST_SPEED DEFLATED ZIP 成功。
 2. 多张截图通过 Android 分享菜单批量处理成功。
 3. PNG 输入正常。
 4. HEIC 输入正常。
@@ -1043,7 +1048,7 @@ HEIC 100
 20. Android Lint 没有未处理的重要错误。
 21. 最终 ZIP 位于公共 Download/GPT Screenshot Pack/Output/，系统文件选择器可见。
 22. 清理 Temp 不影响 Output，Output 不会自动删除。
-23. ZIP 每项为 STORED，size/压缩大小/CRC32 正确，采用流式读写。
+23. ZIP 每项为 DEFLATED，等级 BEST_SPEED，未压缩/压缩大小/CRC32 正确，采用流式读写并可被 ZIP 文件/流式读取器还原。
 24. 默认 100%，HEIC/JPEG 的质量快捷值为 50/75/85/90/95/100，PNG 隐藏质量。
 
 ---
@@ -1085,6 +1090,8 @@ Codex 开始开发前应：
 
 ## 31. v0.2.0 保留与升级规则
 
+以下 31～33 节为历史演进记录；旧版 STORED 和主界面格式选择已由 0.5.0 的当前规格及第 34 节取代。
+
 保留现有 HeifWriter / MediaCodec、CQ Auto、Grid Auto 和完整 Codec 诊断，不重建工程。0.1.0 实际使用稳定版 HeifWriter 1.1.0；Prefer Hardware/Software 与可选 CQ 未在旧版实现，0.2.0 不伪造这些能力，README 明确记录稳定公开 API 限制。版本升级至 0.2.0 / versionCode 2；保存的参数继续沿用，新安装或缺省设置默认 100%。若无 release signing，沿用已有 debug keystore 发布可安装 APK，并在 GitHub Release 注明。
 
 ## 32. v0.3.0 分享流程与升级规则
@@ -1104,3 +1111,13 @@ Codex 开始开发前应：
 确认时读取保存的图像设置，只替换本次分辨率模式，不修改保存的质量/比例等其他键。已打开的主界面同步最后确认的模式，手动测试使用相同尺寸逻辑。生成 ZIP 后保存到公共 Output、提示并自动关闭，不再次打开系统分享菜单。保留 STORED、ZIP 仅图片、HEIC/PNG/JPEG、命名、Temp/Output 清理、原开发签名及稳定公开 API 的既有限制。
 
 新增验收：主界面降低比例为 50% 时，原始模式保持输入宽高且照常切片；降低模式输出 50% 宽高；模式/名称/日期旋转与下次分享均保持；切换模式后已保存的两种质量、格式和比例不变；HEIC 缺省 85，JPEG 缺省 95。
+
+## 34. v0.5.0 ZIP 兼容性与每次任务格式
+
+版本 0.5.0 / versionCode 5，按完整发行版发布。ZIP 由 STORED 改为 DEFLATED，统一使用 Deflater.BEST_SPEED，不再强制 size=compressedSize。双遍流式校验和取消/失败清理继续保留，ZIP 中仍只包含处理后的图片。
+
+分享小窗提供 HEIC / JPEG / PNG；没有记录时默认 HEIC，原有格式键沿用。确认时与名称、日期和模式一起原子保存，主界面保存长期参数不写格式键。格式选择在旋转时保留，取消不覆盖上次确认的格式。主界面显示 HEIC/JPEG 两组长期品质和原有编码器/CQ/诊断/降低比例/清理参数，桌面测试读取最近确认格式，不添加格式控制。
+
+原始模式强制 100%，降低模式使用主界面降低比例，说明文字及记忆不变。独立轻量分享 Activity → 设置 → 处理 → 生成 ZIP → 保存 Output → 自动关闭，不进入完整主界面、不再次打开系统 Sharesheet。保留 HEIC 编码实现、16384 px 切片、文件命名、Temp/Output、清理和原开发签名。
+
+新增验收：所有图片 entry 为 DEFLATED、等级与 BEST_SPEED 参考结果一致、内容可经 ZipFile/ZipInputStream 还原；流式大小/CRC 与句柄正常，输入变化拒绝；小窗格式默认/选择/旋转/下次记忆/取消正确，主界面保存不能改写格式，JPEG 使用已保存 JPEG 质量、PNG 不新增质量选项；现有分辨率、输出路径和自动退出保持。

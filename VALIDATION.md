@@ -1,54 +1,57 @@
-# v0.4.0 验证记录
+# v0.5.0 验证记录
 
-日期：2026-10-05（Asia/Shanghai）。版本 **0.4.0 / versionCode 4**，在同一 GitHub 项目的 0.3.0 上继续修改，没有重建项目。
+日期：2026-10-05（Asia/Shanghai）。版本 **0.5.0 / versionCode 5**，在现有同一项目的 0.4.0 上小步迭代，没有重建项目。
 
 环境：Temurin JDK 17.0.20.1、Gradle 8.13、Android Platform 36 r02、Build Tools 35.0.0。
 
 ```text
 ./gradlew build testDebugUnitTest lintDebug assembleDebugAndroidTest --console=plain
-BUILD SUCCESSFUL in 40s
-138 actionable tasks: 53 executed, 85 up-to-date
+BUILD SUCCESSFUL in 32s
+138 actionable tasks: 49 executed, 89 up-to-date
 ```
 
 ## 单元测试与 Lint
 
-Debug / Release 各运行同一组 **17 个单元测试**：PackRulesTest 9 个、ZipNamingTest 5 个、ResolutionModeTest 3 个。均 0 失败、0 错误、0 跳过，不是 34 个不同测试。
+Debug / Release 各运行同一组 **18 个单元测试**：PackRulesTest 10 个、ZipNamingTest 5 个、ResolutionModeTest 3 个。均 0 失败、0 错误、0 跳过，不是 36 个不同测试。
 
-- 缺省 HEIC 85、JPEG 95；Quality 快捷值仍为 50 / 75 / 85 / 90 / 95 / 100。
-- 原始模式直接保持输入尺寸，忽略 25 / 33 / 50 / 60 / 67 / 75 / 100 等保存的降低比例；1440×19399 仍均匀分成两片。
-- 降低模式 50% 输出 720×9700，不切片；67% 输出 965×12997；100% 保持原尺寸。模式切换保留质量、格式和比例。
-- 原有双轴切片、命名/重名、图片专用 STORED ZIP、size/压缩大小/CRC32、10 MiB 双遍有界流、流关闭、输入 CRC 变化、取消清理、ZIP 名称/日期/非法字符/长度测试均继续通过。
+- HEIC/JPEG/PNG 示例 entry 全部为 DEFLATED；按顺序仅存图片。ZipFile 和 ZipInputStream 均能还原内容，未压缩大小和 CRC 正确，输入未改写。
+- BEST_SPEED 通过实际压缩结果与参考 raw DEFLATE 等级 1 比较，并确保 fixture 能与默认压缩级别区分；不是只断言常量值。
+- 10 MiB 生成流仍为两遍 64 KiB 有界处理、两次打开和关闭；验证解压字节长度、压缩后大小与条目类型。
+- 输入在预校验和写入之间发生 CRC 变化会拒绝；DEFLATED 可使用 data descriptor，故写入阶段显式计算实际 size/CRC 与预校验比较，不依赖旧的 STORED closeEntry 校验。取消、错误和空/非图片拒绝继续通过。
+- 原有默认 HEIC 85/JPEG 95、质量与比例快捷值、原始/降低模式、16384 阈值、双轴切片、图片/ZIP 命名、日期、非法名称和 UTF-8 长度测试全部通过。
 
-Android Lint：**No issues found**。保持 abortOnError / warningsAsErrors，不使用 baseline，仅保留原有两类依赖/工具链更新建议豁免。报告及 6 份测试 XML 位于 verification。
+Android Lint：**No issues found**。保持 abortOnError / warningsAsErrors，不使用 baseline，仍只豁免原有两类工具链/依赖更新建议。verification 包含最终构建日志、lint 报告和 6 份单元测试 XML。
 
-## 设置兼容与分享流程
+## 本次功能与设置兼容
 
-- 分享小窗包含 ZIP 名称、日期开关及原始/降低分辨率两个单选模式。初次没有模式键时默认原始分辨率；原有比例值继续保留，但仅降低模式使用。
-- 名称、日期、模式在确认时通过 DataStore 原子保存；只更新三个相关键，不覆盖保存的质量、比例、格式或其他高级键。取消不覆盖上次确认的偏好。
-- HEIC 85 仅用于新安装或质量偏好缺失；已有质量值，包括已保存的 95，继续保留，不以新默认强制覆盖。JPEG 默认 95 不变。
-- 主界面比例标为“降低分辨率比例”，也提供模式选择；已打开的主界面同步确认后的模式。结果显示实际生效比例。
-- 确认时读取最新保存的图像设置，并覆盖本次模式；原始尺寸直接交给切片/解码阶段，没有缩放。内存预算仍保留，超预算提示选择降低模式及调低比例。
-- 保留独立透明 ShareActivity，成功后提示并 finish 自己，不打开主界面或系统 Sharesheet；桌面图标仍进 MainActivity，手动结果分享保留。
+- ZIP 全部改为 ZipEntry.DEFLATED / Deflater.BEST_SPEED（等级 1），压缩大小由写入器计算，不再强制等于原大小；只含图片，没有 manifest、README、JSON 或日志。
+- 分享设置窗增加 HEIC / JPEG / PNG，确认时与名称/日期/模式一起原子保存；无记录默认 HEIC，沿用已有 format 键和保存值，不清空历史偏好。
+- MainActivity 移除格式选择，长期保存方法不写 format 键，分别保留 HEIC/JPEG 品质和两组 50/75/85/90/95/100 快捷值。桌面测试读取最近确认的分享格式，主界面只显示说明。
+- 当前主界面监听最后确认的模式/格式，改变长期品质/比例不会覆盖分享格式；分享保存四个相关键，不改质量/比例或其他高级键。
+- 已有质量值保留，HEIC 缺省 85 / JPEG 95 不变；PNG 不新增有损质量设置。
+- 原始模式强制 100%，降低模式使用主界面比例；原来的模式说明、记忆、16384 px 分割、命名和清理保持。
+- 仍为独立轻量 ShareActivity，保存到公共 Output 后提示并关闭，返回原应用，不再次打开 Sharesheet。桌面入口仍进入 MainActivity。
 
-## APK 与签名
+## 可安装 APK
 
-- 可安装附件：GPT-Screenshot-Pack-0.4.0-debug.apk。项目无 release signing，继续使用原 debug keystore，v2 签名验证通过。
-- 证书 SHA-256 与 0.1.0 / 0.2.0 / 0.3.0 一致：e6026d6cf3d969afe91ca9a266d879d379ad8299dda863190a2c5c3fa082d354，可覆盖安装；密钥未上传。
-- aapt：com.gptscreenshotpack、versionCode=4、versionName=0.4.0、minSdk=28、targetSdk=36。
-- 无 INTERNET / MANAGE_EXTERNAL_STORAGE；WRITE_EXTERNAL_STORAGE 仅 maxSdkVersion=28。MAIN/LAUNCHER 仍只由 MainActivity 接收，SEND / SEND_MULTIPLE 的 image/* 仍只由 ShareActivity 接收。
+GPT-Screenshot-Pack-0.5.0-debug.apk，已验证 v2 签名。项目无 release signing，沿用 0.1.0～0.4.0 的 debug keystore，支持覆盖安装；密钥不上传。
 
-## Android 设备测试边界
+证书 SHA-256：e6026d6cf3d969afe91ca9a266d879d379ad8299dda863190a2c5c3fa082d354。
 
-当前环境没有 Android 实机或可用模拟器，**6 个设备测试已编译但未执行**，不能把编译结果视为实机通过。
+aapt：com.gptscreenshotpack、versionCode=5、versionName=0.5.0、minSdk=28、targetSdk=36。无 INTERNET / MANAGE_EXTERNAL_STORAGE，WRITE_EXTERNAL_STORAGE 仅 maxSdkVersion=28；启动和分享的独立路由不变。
 
-- 保留实际 HEIC 往返、PNG/50 张/长图/切片/失败、公共 Output/pending/重名、Temp 清理保护活跃任务、无网络权限及独立分享路由。
-- 分享流程测试已扩展为：保存的降低比例 50%，初次仍为原始；选择降低模式后旋转保持模式/名称/日期，ZIP 图片真实尺寸 8×12；下次记住降低模式，切回原始后输出真实 16×24；两种质量 75/90、比例和 PNG 格式保持；保存后自动关闭，不启动 MainActivity；全部失败保持错误与重试。
-- 测试恢复原图像/命名/模式偏好，清理自己的测试输出，不调用全量 Output 清理。
+## 设备测试边界
 
-仍需实机验收：真实相册分享及返回、软键盘和小窗外观、Android 9 授权、文件选择器可见性、厂商 HEIC 行为以及本次 85 质量的实际体积/OCR 对照。没有用本地单元测试声称实测压缩率或识别速度。连接设备后运行 ./gradlew connectedDebugAndroidTest。
+当前环境没有 Android 设备或可用模拟器，**6 个设备测试已编译但未执行**，不能把编译当作实机通过。
 
-## 输出与发布
+- 原有 HEIC 实际往返、PNG/50 张/长图/失败、公共文件/清理/重名与入口测试的 ZIP 断言更新为 DEFLATED。
+- 分享流程测试：默认 HEIC；主界面保存携带 JPEG 不改变任务格式；选择 PNG 后旋转保留；下次记忆 PNG/模式/名称/日期；降低输出 8×12、原始输出 16×24；改选 JPEG 使用已保存质量 90 并生成 jpg；下次记住 JPEG，取消修改 HEIC 不覆盖；全程保存后关闭，不启动 MainActivity；两种质量 75/90 和比例仍保留。
+- 测试恢复原偏好，仅删除自己的测试输出，不清空用户的 Output。
 
-最终 ZIP 继续保存到 Download/GPT Screenshot Pack/Output/；中间文件在 Temp/<UUID>/。Output 永不自动删除；ZIP 仍仅图片、STORED，图片名/切片编号/重名规则与清理逻辑保留。HeifWriter 编码、CQ Auto、Grid Auto、MediaCodec 诊断未修改，稳定公开 API 差异继续记录在 README。
+真实分享返回、小窗/键盘外观、Android 9 授权、文件选择器可见性、厂商 HEIC 编码、真实截图/OCR，以及 ChatGPT/其他接收方的 ZIP 接受行为仍需实机确认。本版完成 ZIP 标准读取验证，没有声称某个第三方上传器已通过。连接设备后运行 ./gradlew connectedDebugAndroidTest。
 
-提交源码、规格、README、验证记录，创建 v0.4.0 tag / GitHub Release，附件为同签名 debug APK、源码 ZIP 和 SHA-256 文件。使用现有发布工作流校验并上传已验证的同一批文件，不重新签名或上传密钥。
+## 输出与完整发行
+
+最终目录：Download/GPT Screenshot Pack/Output/；中间文件：Temp/<UUID>/。Output 永不自动删除，Temp 活跃任务保护、输出清理、文件命名不变。AndroidX HeifWriter、CQ Auto、Grid Auto、MediaCodec 诊断实现未改，稳定公开 API 差异继续见 README。
+
+提交源码、README/规格/验证记录与已签名 APK；创建 v0.5.0 tag 和 GitHub Release。附件包含 APK、干净源码 ZIP 和 SHA-256。沿用现有工作流校验并上传同一批产物，不重新签名、不开新的仓库。

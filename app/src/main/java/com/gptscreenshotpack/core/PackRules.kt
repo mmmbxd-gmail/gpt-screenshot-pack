@@ -4,7 +4,9 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.CRC32
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
+import java.util.zip.ZipException
 import java.util.zip.ZipOutputStream
 import kotlin.math.roundToInt
 
@@ -104,13 +106,14 @@ object ImageZip {
         }
     }
 
-    /** Two bounded-memory passes per image: size/CRC first, then unchanged STORED bytes. */
+    /** Two bounded-memory passes: size/CRC first, then DEFLATED at BEST_SPEED. */
     fun writeStreams(images: List<ZipImage>, destination: OutputStream, checkpoint: () -> Unit = {}) {
         require(images.isNotEmpty()) { "不生成空 ZIP" }
         require(images.all { it.name.substringAfterLast('.', "").lowercase() in setOf("heic", "png", "jpg") &&
             '/' !in it.name && '\\' !in it.name })
         require(images.map { it.name }.distinct().size == images.size)
         ZipOutputStream(destination).use { zip ->
+            zip.setLevel(Deflater.BEST_SPEED)
             val buffer = ByteArray(64 * 1024)
             for (image in images) {
                 checkpoint()
@@ -126,21 +129,26 @@ object ImageZip {
                     }
                 }
                 val entry = ZipEntry(image.name).apply {
-                    method = ZipEntry.STORED
+                    method = ZipEntry.DEFLATED
                     this.size = size
-                    compressedSize = size
                     this.crc = crc.value
                 }
                 zip.putNextEntry(entry)
+                val actualCrc = CRC32()
+                var actualSize = 0L
                 image.open().use { input ->
                     while (true) {
                         checkpoint()
                         val n = input.read(buffer)
                         if (n < 0) break
                         zip.write(buffer, 0, n)
+                        actualCrc.update(buffer, 0, n)
+                        actualSize = Math.addExact(actualSize, n.toLong())
                     }
                 }
-                zip.closeEntry() // Verifies actual size/CRC; changed inputs cannot silently corrupt the ZIP.
+                // DEFLATED can emit a data descriptor instead of validating pre-set metadata.
+                if (actualSize != size || actualCrc.value != crc.value) throw ZipException("图片在校验和打包期间发生变化")
+                zip.closeEntry() // The writer determines the actual compressed size.
             }
         }
     }

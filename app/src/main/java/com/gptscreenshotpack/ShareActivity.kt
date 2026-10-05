@@ -22,6 +22,7 @@ import androidx.core.content.IntentCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
+import com.gptscreenshotpack.core.OutputFormat
 
 internal fun sharedImages(intent: Intent): List<Uri> {
     if (intent.action !in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)) return emptyList()
@@ -94,6 +95,13 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
                         Switch(checked = state.naming.appendDateTime, onCheckedChange = model::editDateTime)
                     }
                     Text("自动补 .zip" + if (state.naming.appendDateTime) "；日期格式 yyyyMMdd_HHmmss" else "")
+                    Text("输出格式")
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(OutputFormat.HEIC, OutputFormat.JPEG, OutputFormat.PNG).forEach { format ->
+                            FilterChip(selected = state.format == format, onClick = { model.editFormat(format) },
+                                label = { Text(format.name) }, modifier = Modifier.weight(1f))
+                        }
+                    }
                     ResolutionOptions(state.resolutionMode, state.reducedScalePercent, model::editResolutionMode)
                     Text("保存到：${PackStorage.OUTPUT_PATH}", style = MaterialTheme.typography.bodySmall)
                 } else if (state.phase != SharePhase.ERROR) {

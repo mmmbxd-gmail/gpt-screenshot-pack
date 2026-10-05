@@ -78,8 +78,8 @@ class PackDeviceTest {
         archive(result).use { zip ->
             val entry = zip.entries().nextElement()
             assertEquals("resized_IMG20261005123801.heic", entry.name)
-            assertEquals(ZipEntry.STORED, entry.method)
-            assertEquals(entry.size, entry.compressedSize)
+            assertEquals(ZipEntry.DEFLATED, entry.method)
+            assertTrue(entry.compressedSize > 0)
             zip.getInputStream(entry).use { input -> heic.outputStream().use { input.copyTo(it) } }
         }
         val decoded = ImageDecoder.decodeBitmap(ImageDecoder.createSource(heic))
@@ -97,7 +97,7 @@ class PackDeviceTest {
         assertEquals(50, batch.outputCount)
         archive(batch).use { zip ->
             assertEquals(50, zip.size())
-            zip.entries().asSequence().forEach { assertEquals(ZipEntry.STORED, it.method) }
+            zip.entries().asSequence().forEach { assertEquals(ZipEntry.DEFLATED, it.method) }
         }
         val long = fixture("long.png", 32, 19399)
         val longResult = process(listOf(long), settings)
@@ -121,7 +121,7 @@ class PackDeviceTest {
             assertEquals(listOf("resized_tall_1.png", "resized_tall_2.png", "resized_tall_3.png"), zip.entries().asSequence().map { it.name }.toList())
             var totalHeight = 0
             zip.entries().asSequence().forEachIndexed { i, entry ->
-                assertEquals(ZipEntry.STORED, entry.method)
+                assertEquals(ZipEntry.DEFLATED, entry.method)
                 val bytes = zip.getInputStream(entry).use { it.readBytes() }
                 assertEquals(8, bytes[24].toInt())
                 assertTrue(bytes[25].toInt() in listOf(2, 6))
