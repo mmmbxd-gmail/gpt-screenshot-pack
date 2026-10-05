@@ -161,6 +161,8 @@ class PackDeviceTest {
         val run = storage.newRun()
         val temp = storage.createTemp(run, "resized_pending.png", "image/png")
         storage.write(temp).use { it.write(byteArrayOf(1, 2, 3)) }
+        storage.cleanTemp()
+        storage.read(temp).use { assertEquals(1, it.read()) } // Active share tasks survive main-screen cleanup.
         storage.cleanRun(run)
         assertTrue(storage.cleanTemp(expiredOnly = true) >= 0)
         context.contentResolver.openInputStream(output.uri)!!.use { assertTrue(it.read() >= 0) }
@@ -181,7 +183,9 @@ class PackDeviceTest {
         assertFalse(info.requestedPermissions.orEmpty().contains("android.permission.INTERNET"))
         for (action in listOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)) {
             val intent = Intent(action).setType("image/png").setPackage(context.packageName)
-            assertTrue(context.packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty())
+            val resolved = context.packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            assertEquals(listOf(ShareActivity::class.java.name), resolved.map { it.activityInfo.name })
         }
+        assertEquals(MainActivity::class.java.name, context.packageManager.getLaunchIntentForPackage(context.packageName)?.component?.className)
     }
 }

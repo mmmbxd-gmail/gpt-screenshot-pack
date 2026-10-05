@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.gptscreenshotpack.core.ZipNamingTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-05T05:45:03.574Z" hostname="58f1db63e923" time="0.011">
+  <properties/>
+  <testcase name="disablingDateTimeAndPastedExtensionsDoNotDuplicateZip" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.001"/>
+  <testcase name="reservesUtf8BytesForTimeAndCollisionSuffix" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.007"/>
+  <testcase name="defaultsKeepLegacyBaseAndEnableDateTime" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.001"/>
+  <testcase name="timestampUsesDeviceTimeZoneAndRequestedFormat" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.001"/>
+  <testcase name="rejectsBlankTraversalControlAndUnsupportedFileCharacters" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

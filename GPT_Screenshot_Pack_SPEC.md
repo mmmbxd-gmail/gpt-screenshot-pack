@@ -1,6 +1,6 @@
 # GPT Screenshot Pack
 
-> 当前规格版本：0.2.0（2026-10-05）。在既有 Android 项目上迭代：默认 100%、公共 Downloads、STORED ZIP 和独立清理；公开 API 差异继续以 README 为准。
+> 当前规格版本：0.3.0（2026-10-05）。在既有 Android 项目上迭代：独立分享命名流程、保存 ZIP 后退出；保留默认 100%、公共 Downloads、STORED ZIP 和独立清理。公开 API 差异继续以 README 为准。
 
 ## 1. 项目目标
 
@@ -67,18 +67,19 @@
 相册多选截图
 → 分享
 → GPT Screenshot Pack
-→ 自动处理
-→ 生成 ZIP
-→ 自动打开系统分享菜单
-→ 选择 ChatGPT
+→ ZIP 命名窗口
+→ 使用保存的图像设置处理
+→ 保存 ZIP 到公共 Output
+→ 自动关闭分享 Activity，返回来源 App
 ```
 
 通过分享菜单调用时：
 
 - 默认直接使用上次保存的设置；
-- 不要求每次确认参数；
-- 可以显示简洁处理进度；
-- 完成后自动打开系统 Sharesheet。
+- 不进入正常主界面、不要求每次确认图像参数；
+- 先确认 ZIP 名称主体和日期开关，再显示简洁处理进度；
+- 成功保存 ZIP 后提示实际名称并自动关闭，不打开系统 Sharesheet；全部失败则显示错误，不生成空 ZIP。
+- `ACTION_SEND` / `ACTION_SEND_MULTIPLE` 由独立 ShareActivity 接收，桌面 MAIN/LAUNCHER 继续由 MainActivity 接收。
 
 ### 3.2 主界面
 
@@ -636,7 +637,7 @@ resized_Screenshot_20261005_013022_copy2_2.heic
 
 所有输出图片打包成一个 ZIP。
 
-ZIP 默认按生成时间命名：
+桌面手动测试的 ZIP 默认按时间命名，分享入口默认主体同为 GPT_Screenshots，但支持用户自定义：
 
 ```text
 GPT_Screenshots_yyyyMMdd_HHmmss.zip
@@ -647,6 +648,15 @@ GPT_Screenshots_yyyyMMdd_HHmmss.zip
 ```text
 GPT_Screenshots_20261005_013022.zip
 ```
+
+分享命名窗口：
+
+- 输入主体，自动补 `.zip`；已粘贴的 `.zip` 后缀不重复添加。
+- “自动附加日期时间”默认开启，使用手机本地时区、确认时的 `yyyyMMdd_HHmmss`。
+- 例如 `聊天记录_20261005_132530.zip`；关闭日期开关时为 `聊天记录.zip`。
+- 使用 DataStore 记住上一次确认的主体和开关；未确认/取消的修改不覆盖记忆。
+- 空白、路径分隔符、控制字符或常见非法文件名字符需修改；主体上限 200 UTF-8 字节，为时间及重名后缀留空间。
+- 同名追加 `_copy2` 等，不覆盖既有 ZIP。图片命名与切片编号规则不变。
 
 ZIP 内：
 
@@ -760,7 +770,7 @@ Unknown
 
 ## 21. 分享生成的 ZIP
 
-Android 10+ 使用 MediaStore.Downloads 的 `content://` URI 分享公共 Output ZIP；Android 9 使用限定目录的 FileProvider。通过 ClipData、ACTION_SEND 和临时读取授权打开系统 Sharesheet，不暴露私有真实路径。
+只有桌面主界面的“分享 ZIP”按钮打开系统 Sharesheet。Android 10+ 使用 MediaStore.Downloads 的 `content://` URI；Android 9 使用限定目录的 FileProvider。通过 ClipData、ACTION_SEND 和临时读取授权，不暴露私有真实路径。系统分享进入的轻量流程保存完成后直接退出，不再弹出 Sharesheet。
 
 最终 ZIP 也可直接从 ChatGPT 的系统文件选择器选取，不要求经 Sharesheet 导入。
 
@@ -779,8 +789,9 @@ Download/GPT Screenshot Pack/
 - 任务完成或失败/取消时清理本次 Temp；启动时只清理超过 24 小时的 Temp。
 - Output 不自动删除，已发布后收到取消请求也保留。
 - App 提供“清理临时文件”和“清理生成文件”两个独立按钮；前者不能删除 Output，后者需明确确认。
-- 清理范围只限本应用生成的文件；不得删除原始截图。处理时禁用清理，防止与编码/打包竞争。
-- ZIP 名称继续按生成时间命名，同名不覆盖；图片命名规则完全保持。
+- 清理不得删除原始截图。主界面本身处理时禁用清理，清理 Temp 时跳过进程内活跃的主界面/分享任务。
+- Output 清理支持自定义 ZIP 名称；Android 10+ 按 owner、精确目录及 ZIP MIME/扩展名过滤。Android 9 无 owner 列，仅清理专用 Output 中的 `.zip`，请勿放入无关 ZIP。
+- ZIP 名称按分享命名确认或桌面默认时间规则生成，同名不覆盖；图片命名规则完全保持。
 
 ---
 
@@ -815,7 +826,17 @@ Download/GPT Screenshot Pack/
 
 ## 24. 处理进度界面
 
-通过系统分享调用时，可以出现极简页面：
+通过系统分享调用时，先使用独立轻量窗口确认 ZIP 名称：
+
+```text
+ZIP 文件名
+[聊天记录]
+[开启] 自动附加日期时间
+自动补 .zip；日期格式 yyyyMMdd_HHmmss
+[取消] [开始处理]
+```
+
+随后显示极简进度：
 
 ```text
 正在处理图片
@@ -827,7 +848,7 @@ Download/GPT Screenshot Pack/
 
 不需要复杂动画。
 
-完成后自动打开 Sharesheet。
+保存成功后自动关闭分享 Activity，返回原 App，不自动打开 Sharesheet。部分成功时保存有效图片并提示数量；全部失败时保留错误窗口，可重试或关闭。
 
 如果任务完成非常快，应避免不必要的界面闪烁。
 
@@ -856,7 +877,8 @@ CQ                自动
 ZIP 名称          按生成时间
 
 完成
-处理完成后        打开系统分享菜单
+桌面测试完成后    显示结果，可手动分享
+系统分享完成后    保存并自动退出
 
 [选择图片并测试]
 
@@ -999,7 +1021,7 @@ HEIC 100
 12. 正常输出带 `resized_` 前缀。
 13. 切片正确使用 `_1`、`_2`、`_3`。
 14. 输入顺序得到合理保持。
-15. 生成 ZIP 可以通过系统 Sharesheet 分享。
+15. 桌面主界面可手动通过系统 Sharesheet 分享 ZIP；分享入口保存完成后直接退出。
 16. 原始截图完全不被修改。
 17. App 没有网络权限。
 18. 处理几十张图片不存在明显内存泄漏或文件句柄泄漏。
@@ -1050,3 +1072,11 @@ Codex 开始开发前应：
 ## 31. v0.2.0 保留与升级规则
 
 保留现有 HeifWriter / MediaCodec、CQ Auto、Grid Auto 和完整 Codec 诊断，不重建工程。0.1.0 实际使用稳定版 HeifWriter 1.1.0；Prefer Hardware/Software 与可选 CQ 未在旧版实现，0.2.0 不伪造这些能力，README 明确记录稳定公开 API 限制。版本升级至 0.2.0 / versionCode 2；保存的参数继续沿用，新安装或缺省设置默认 100%。若无 release signing，沿用已有 debug keystore 发布可安装 APK，并在 GitHub Release 注明。
+
+## 32. v0.3.0 分享流程与升级规则
+
+版本 0.3.0 / versionCode 3，基于同一项目继续修改，沿用原开发签名。分享入口不复用 MainActivity，而使用无任务亲和性的透明 ShareActivity，取消或成功后只 finish 自己，不移除来源 App 的任务。主界面和 HEIC 稳定公开 API 限制继续保留。
+
+命名输入、日期开关、进度及权限请求在屏幕旋转时保持。任务取消在检查点响应，等待 Temp 清理后退出，已发布的 Output 保留。后台完成后回到前台再提示并关闭。不保证系统强制杀进程后恢复编码；已提交任务不自动重跑，提示用户重新分享，避免重复输出。
+
+新增验收：单张/多张/ClipData 分享仅打开轻量命名窗；默认日期开关开启、记住确认的名称/开关、自动补扩展名；确认前不处理；旋转不重复任务；自定义 ZIP 保存到公共 Output 且为 STORED/仅图片；保存成功关闭分享 Activity、不打开主界面或 Sharesheet；全部失败显示错误；同名不覆盖；Temp 清理跳过其他活跃分享任务，Output 清理支持自定义名称。

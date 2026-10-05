@@ -20,7 +20,7 @@ data class PackUiState(
     val settings: PackSettings = PackSettings(), val ready: Boolean = false,
     val busy: Boolean = false, val done: Int = 0, val total: Int = 0,
     val result: PackResult? = null, val message: String? = null,
-    val autoSharePending: Boolean = false, val diagnostics: String? = null,
+    val diagnostics: String? = null,
     val askStoragePermission: Boolean = false, val awaitingStoragePermission: Boolean = false,
     val busyLabel: String = "正在处理图片",
 )
@@ -31,7 +31,7 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(PackUiState())
     val state: StateFlow<PackUiState> = mutable
     private var job: Job? = null
-    private var pendingStart: Pair<List<Uri>, Boolean>? = null
+    private var pendingStart: List<Uri>? = null
     init {
         viewModelScope.launch {
             try {
@@ -51,16 +51,16 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
             catch (e: Exception) { mutable.update { it.copy(message = "设置保存失败：${e.message}") } }
         }
     }
-    fun start(uris: List<Uri>, autoShare: Boolean) {
+    fun start(uris: List<Uri>) {
         if (mutable.value.busy || mutable.value.awaitingStoragePermission) { message("正在处理上一个请求，请稍后重试分享"); return }
         if (uris.isEmpty()) { message("没有收到可读取的图片"); return }
         if (!PackStorage.hasPermission(getApplication())) {
-            pendingStart = uris.toList() to autoShare
+            pendingStart = uris.toList()
             mutable.update { it.copy(askStoragePermission = true, awaitingStoragePermission = true) }
             return
         }
         mutable.update { it.copy(busy = true, done = 0, total = uris.size, result = null, message = null,
-            autoSharePending = false, busyLabel = "正在处理图片") }
+            busyLabel = "正在处理图片") }
         job = viewModelScope.launch {
             try {
                 // Wait for initialization without using stale defaults on an incoming share.
@@ -69,7 +69,7 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
                 val result = PackProcessor(getApplication()).process(uris, settings) { done, total ->
                     mutable.update { it.copy(done = done, total = total) }
                 }
-                mutable.update { it.copy(busy = false, result = result, autoSharePending = autoShare && result.zip != null) }
+                mutable.update { it.copy(busy = false, result = result) }
             } catch (e: CancellationException) {
                 mutable.update { it.copy(busy = false, message = "已取消，本次未完成的临时文件已清理；已发布 ZIP 保留在 Output") }
                 throw e
@@ -84,10 +84,9 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
         val pending = pendingStart
         pendingStart = null
         mutable.update { it.copy(askStoragePermission = false, awaitingStoragePermission = false) }
-        if (granted && pending != null) start(pending.first, pending.second)
+        if (granted && pending != null) start(pending)
         else if (!granted) message("Android 9 需要存储权限才能写入公共 Downloads，请在应用设置中授予后重试")
     }
-    fun consumeShare() { mutable.update { it.copy(autoSharePending = false) } }
     fun message(value: String) { mutable.update { it.copy(message = value) } }
     fun diagnostics() {
         viewModelScope.launch {
@@ -101,7 +100,7 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
         if (mutable.value.busy || mutable.value.awaitingStoragePermission) return
         if (!PackStorage.hasPermission(getApplication())) { message("Android 9 需要先授予存储权限"); return }
         mutable.update { it.copy(busy = true, done = 0, total = 0,
-            result = if (output) null else it.result, autoSharePending = false,
+            result = if (output) null else it.result,
             busyLabel = if (output) "正在清理生成文件" else "正在清理临时文件") }
         job = viewModelScope.launch {
             try {

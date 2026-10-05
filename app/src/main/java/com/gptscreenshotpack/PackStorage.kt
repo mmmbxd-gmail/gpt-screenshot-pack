@@ -32,6 +32,7 @@ class PackStorage(private val context: Context) {
         const val ROOT_PATH = "Download/GPT Screenshot Pack/"
         const val TEMP_PATH = "${ROOT_PATH}Temp/"
         const val OUTPUT_PATH = "${ROOT_PATH}Output/"
+        private val activeRuns = mutableSetOf<String>()
         fun hasPermission(context: Context): Boolean = Build.VERSION.SDK_INT >= 29 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
     }
@@ -41,7 +42,7 @@ class PackStorage(private val context: Context) {
 
     fun newRun(): Run {
         check(hasPermission(context)) { "Android 9 需要存储权限才能写入公共 Downloads" }
-        return Run()
+        return synchronized(activeRuns) { Run().also { activeRuns.add(it.id) } }
     }
 
     @RequiresApi(29)
@@ -125,24 +126,27 @@ class PackStorage(private val context: Context) {
         arrayOf(OUTPUT_PATH, name), null)?.use { it.moveToFirst() } ?: false
 
     fun cleanRun(run: Run) {
-        if (Build.VERSION.SDK_INT >= 29) cleanMediaStore("$TEMP_PATH${run.id}/", false) {}
-        else File(legacyRoot(), "Temp/${run.id}").deleteRecursively()
+        try {
+            if (Build.VERSION.SDK_INT >= 29) cleanMediaStore("$TEMP_PATH${run.id}/", false) {}
+            else File(legacyRoot(), "Temp/${run.id}").deleteRecursively()
+        } finally { synchronized(activeRuns) { activeRuns.remove(run.id) } }
     }
 
-    fun cleanTemp(expiredOnly: Boolean = false, checkpoint: () -> Unit = {}): Int {
-        if (!hasPermission(context)) return 0
-        if (Build.VERSION.SDK_INT >= 29) return cleanMediaStore(TEMP_PATH, expiredOnly, checkpoint)
+    fun cleanTemp(expiredOnly: Boolean = false, checkpoint: () -> Unit = {}): Int = synchronized(activeRuns) {
+        // A main-screen cleanup must not delete another ShareActivity's active intermediate files.
+        if (!hasPermission(context)) return@synchronized 0
+        if (Build.VERSION.SDK_INT >= 29) return@synchronized cleanMediaStore(TEMP_PATH, expiredOnly, checkpoint)
         var deleted = 0
         val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
         File(legacyRoot(), "Temp").listFiles()?.forEach { run ->
             checkpoint()
             // Only task directories created by this app; ignore unrelated manually placed files.
-            if (run.isDirectory && run.name.matches(Regex("[0-9a-fA-F-]{36}")) && (!expiredOnly || run.lastModified() < cutoff)) {
+            if (run.isDirectory && run.name !in activeRuns && run.name.matches(Regex("[0-9a-fA-F-]{36}")) && (!expiredOnly || run.lastModified() < cutoff)) {
                 run.walkTopDown().filter { it.isFile }.forEach { checkpoint(); if (it.delete()) deleted++ }
                 run.deleteRecursively()
             }
         }
-        return deleted
+        deleted
     }
 
     fun cleanOutput(checkpoint: () -> Unit = {}): Int {
@@ -151,7 +155,8 @@ class PackStorage(private val context: Context) {
         var deleted = 0
         File(legacyRoot(), "Output").listFiles()?.forEach { file ->
             checkpoint()
-            if (file.isFile && file.name.startsWith("GPT_Screenshots_") && file.extension == "zip" && file.delete()) deleted++
+            // API 28 has no owner column; Output is the app's dedicated generated-ZIP directory.
+            if (file.isFile && file.extension == "zip" && file.delete()) deleted++
         }
         return deleted
     }
@@ -159,15 +164,18 @@ class PackStorage(private val context: Context) {
     @RequiresApi(29)
     private fun cleanMediaStore(path: String, expiredOnly: Boolean, checkpoint: () -> Unit): Int {
         val isOutput = path == OUTPUT_PATH
+        val excludedRuns = if (path == TEMP_PATH) activeRuns.map { "$TEMP_PATH$it/" } else emptyList()
         val selection = buildString {
             append("${MediaStore.MediaColumns.RELATIVE_PATH} ${if (isOutput) "= ?" else "LIKE ?"}")
             append(" AND ${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?")
             if (isOutput) append(" AND ${MediaStore.MediaColumns.MIME_TYPE} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} GLOB ?")
             if (expiredOnly) append(" AND ${MediaStore.MediaColumns.DATE_ADDED} < ?")
+            if (excludedRuns.isNotEmpty()) append(" AND ${MediaStore.MediaColumns.RELATIVE_PATH} NOT IN (${excludedRuns.joinToString(",") { "?" }})")
         }
         val args = mutableListOf(if (isOutput) path else "$path%", context.packageName)
-        if (isOutput) args.addAll(listOf("application/zip", "GPT_Screenshots_*.zip"))
+        if (isOutput) args.addAll(listOf("application/zip", "*.zip"))
         if (expiredOnly) args.add((System.currentTimeMillis() / 1000 - 24 * 60 * 60).toString())
+        args.addAll(excludedRuns)
         val queryArgs = Bundle().apply {
             putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
             putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, args.toTypedArray())

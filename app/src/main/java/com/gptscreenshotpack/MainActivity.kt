@@ -3,7 +3,6 @@ package com.gptscreenshotpack
 import android.content.ClipData
 import android.content.Intent
 import android.Manifest
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,10 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.content.IntentCompat
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.compose.currentStateAsState
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.PackPresets
 import java.util.Locale
@@ -33,38 +29,18 @@ class MainActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) receive(intent)
         setContent {
             MaterialTheme {
                 val state by model.state.collectAsStateWithLifecycle()
-                val lifecycleState by lifecycle.currentStateAsState()
                 LaunchedEffect(state.askStoragePermission) {
                     if (state.askStoragePermission) {
                         model.permissionDialogLaunching()
                         storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     }
                 }
-                LaunchedEffect(state.autoSharePending, lifecycleState) {
-                    if (state.autoSharePending && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
-                        model.consumeShare()
-                        state.result?.zip?.let { share(it) }
-                    }
-                }
                 PackScreen(state, model) { share(it) }
             }
         }
-    }
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); receive(intent) }
-
-    private fun receive(intent: Intent) {
-        if (intent.action != Intent.ACTION_SEND && intent.action != Intent.ACTION_SEND_MULTIPLE) return
-        val streams = if (intent.action == Intent.ACTION_SEND_MULTIPLE)
-            IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
-        else listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
-        val incoming = streams.ifEmpty {
-            intent.clipData?.let { clip -> (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri } }.orEmpty()
-        }
-        model.start(incoming, autoShare = true)
     }
 
     private fun share(output: PackOutput) {
@@ -87,7 +63,7 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
     var diagnosticPage by remember { mutableStateOf(false) }
     var confirmCleanOutput by remember { mutableStateOf<Boolean?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
-        if (it.isNotEmpty()) model.start(it, autoShare = false)
+        if (it.isNotEmpty()) model.start(it)
     }
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.safeDrawingPadding().padding(20.dp).verticalScroll(rememberScrollState()),

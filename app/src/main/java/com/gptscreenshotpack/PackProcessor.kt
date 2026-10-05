@@ -18,9 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlin.time.TimeSource
 
 data class PackResult(
@@ -110,8 +107,11 @@ class PackProcessor(private val context: Context) {
         check(storage.size(output) > 0) { "编码结果为空" }
     }
 
-    suspend fun process(uris: List<Uri>, settings: PackSettings, progress: (Int, Int) -> Unit): PackResult = withContext(Dispatchers.IO) {
+    suspend fun process(uris: List<Uri>, settings: PackSettings, zipName: String? = null,
+        progress: (Int, Int) -> Unit): PackResult = withContext(Dispatchers.IO) {
         require(uris.isNotEmpty())
+        val archiveName = zipName ?: ZipNaming().fileName()
+        ZipNaming.requireFileName(archiveName)
         val clock = TimeSource.Monotonic.markNow()
         val coroutine = currentCoroutineContext()
         val run = storage.newRun()
@@ -188,8 +188,7 @@ class PackProcessor(private val context: Context) {
                     clock.elapsedNow().inWholeMilliseconds, settings, errors, notes)
             }
             val imageBytes = images.sumOf { storage.size(it) }
-            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val staged = storage.createTemp(run, "GPT_Screenshots_$stamp.zip", "application/zip")
+            val staged = storage.createTemp(run, archiveName, "application/zip")
             storage.write(staged).buffered().use { output ->
                 ImageZip.writeStreams(images.map { file -> ZipImage(file.name) { storage.read(file) } }, output) { coroutine.ensureActive() }
             }
