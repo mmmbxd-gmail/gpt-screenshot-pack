@@ -1,0 +1,2 @@
+2fd488ee1db27787336c9592ffb85903fd03ada5999104af04b5a84f076292b6  GPT-Screenshot-Pack-0.5.0-debug.apk
+f5fa64c2834da062312a2c19cae33dfc735fa92cea68af410105d6eddf55656b  GPT-Screenshot-Pack-0.5.0-source.zip
