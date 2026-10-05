@@ -1,2 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths><cache-path name="packs" path="packs/" /></paths>
+<paths>
+    <cache-path name="packs" path="packs/" />
+    <external-path name="legacy_temp" path="Download/GPT Screenshot Pack/Temp/" />
+    <external-path name="legacy_output" path="Download/GPT Screenshot Pack/Output/" />
+</paths>

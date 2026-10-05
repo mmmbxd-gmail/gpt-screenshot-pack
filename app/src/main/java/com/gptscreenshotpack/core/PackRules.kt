@@ -1,6 +1,9 @@
 package com.gptscreenshotpack.core
 
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.roundToInt
@@ -8,7 +11,7 @@ import kotlin.math.roundToInt
 enum class OutputFormat(val extension: String) { HEIC("heic"), PNG("png"), JPEG("jpg") }
 
 data class PackSettings(
-    val scalePercent: Int = 50,
+    val scalePercent: Int = 100,
     val format: OutputFormat = OutputFormat.HEIC,
     val heicQuality: Int = 95,
     val jpegQuality: Int = 95,
@@ -18,6 +21,11 @@ data class PackSettings(
         require(heicQuality in 1..100 && jpegQuality in 1..100)
     }
     val quality: Int get() = if (format == OutputFormat.JPEG) jpegQuality else heicQuality
+}
+
+object PackPresets {
+    val scales = listOf(33, 50, 60, 67, 75, 100)
+    val qualities = listOf(50, 75, 85, 90, 95, 100)
 }
 
 data class Dimensions(val width: Int, val height: Int) {
@@ -76,31 +84,59 @@ class OutputNames {
     }
 }
 
+data class ZipImage(val name: String, val open: () -> InputStream)
+
 object ImageZip {
     fun write(images: List<File>, destination: File, checkpoint: () -> Unit = {}) {
-        require(images.isNotEmpty()) { "不生成空 ZIP" }
-        require(images.all { it.isFile && it.extension.lowercase() in setOf("heic", "png", "jpg") })
-        require(images.map { it.name }.distinct().size == images.size)
+        require(images.all { it.isFile })
         try {
-            ZipOutputStream(destination.outputStream().buffered()).use { zip ->
-                val buffer = ByteArray(64 * 1024)
-                for (file in images) {
-                    checkpoint()
-                    zip.putNextEntry(ZipEntry(file.name))
-                    file.inputStream().buffered().use { input ->
-                        while (true) {
-                            checkpoint()
-                            val n = input.read(buffer)
-                            if (n < 0) break
-                            zip.write(buffer, 0, n)
-                        }
-                    }
-                    zip.closeEntry()
-                }
+            destination.outputStream().buffered().use { stream ->
+                writeStreams(images.map { file -> ZipImage(file.name) { file.inputStream() } }, stream, checkpoint)
             }
         } catch (e: Throwable) {
             destination.delete()
             throw e
+        }
+    }
+
+    /** Two bounded-memory passes per image: size/CRC first, then unchanged STORED bytes. */
+    fun writeStreams(images: List<ZipImage>, destination: OutputStream, checkpoint: () -> Unit = {}) {
+        require(images.isNotEmpty()) { "不生成空 ZIP" }
+        require(images.all { it.name.substringAfterLast('.', "").lowercase() in setOf("heic", "png", "jpg") &&
+            '/' !in it.name && '\\' !in it.name })
+        require(images.map { it.name }.distinct().size == images.size)
+        ZipOutputStream(destination).use { zip ->
+            val buffer = ByteArray(64 * 1024)
+            for (image in images) {
+                checkpoint()
+                val crc = CRC32()
+                var size = 0L
+                image.open().use { input ->
+                    while (true) {
+                        checkpoint()
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        crc.update(buffer, 0, n)
+                        size = Math.addExact(size, n.toLong())
+                    }
+                }
+                val entry = ZipEntry(image.name).apply {
+                    method = ZipEntry.STORED
+                    this.size = size
+                    compressedSize = size
+                    this.crc = crc.value
+                }
+                zip.putNextEntry(entry)
+                image.open().use { input ->
+                    while (true) {
+                        checkpoint()
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        zip.write(buffer, 0, n)
+                    }
+                }
+                zip.closeEntry() // Verifies actual size/CRC; changed inputs cannot silently corrupt the ZIP.
+            }
         }
     }
 }

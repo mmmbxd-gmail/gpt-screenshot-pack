@@ -1,3 +1,4 @@
 package: com.gptscreenshotpack
+uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE' maxSdkVersion='28'
 permission: com.gptscreenshotpack.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
 uses-permission: name='com.gptscreenshotpack.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'

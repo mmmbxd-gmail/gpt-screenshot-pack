@@ -18,30 +18,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 import kotlin.time.TimeSource
 
 data class PackResult(
-    val zip: File?, val inputCount: Int, val successCount: Int, val outputCount: Int,
+    val zip: PackOutput?, val inputCount: Int, val successCount: Int, val outputCount: Int,
     val inputBytes: Long, val unknownInputSizes: Int, val outputBytes: Long,
     val elapsedMs: Long, val settings: PackSettings, val errors: List<String>, val notes: List<String>,
 )
 
-class PackCache(context: Context) {
-    val root = File(context.cacheDir, "packs")
-    fun clean(expiredOnly: Boolean = true) {
-        val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
-        root.listFiles()?.filter { !expiredOnly || it.lastModified() < cutoff }?.forEach { it.deleteRecursively() }
-    }
-    fun newRun(): File = File(root, UUID.randomUUID().toString()).also { check(it.mkdirs()) }
-}
-
 class PackProcessor(private val context: Context) {
     private val resolver = context.contentResolver
+    private val storage = PackStorage(context)
     private class Header(val dimensions: Dimensions) : RuntimeException()
 
     private fun dimensions(uri: Uri): Dimensions {
@@ -81,27 +71,29 @@ class PackProcessor(private val context: Context) {
         finally { bitmap.recycle() }
     }
 
-    private fun encode(bitmap: Bitmap, output: File, format: OutputFormat, quality: Int) {
+    private fun encode(bitmap: Bitmap, output: StoredDocument, format: OutputFormat, quality: Int) {
         if (format != OutputFormat.PNG && bitmap.hasAlpha()) {
             Canvas(bitmap).drawColor(Color.WHITE, PorterDuff.Mode.DST_OVER)
             bitmap.setHasAlpha(false)
         }
         if (format == OutputFormat.HEIC) {
             // Own the callback thread: 1.1.0 does not quit its internally created HandlerThread.
-            val thread = HandlerThread("PackHeifCallbacks").apply { start() }
-            try {
-                HeifWriter.Builder(output.absolutePath, bitmap.width, bitmap.height, HeifWriter.INPUT_MODE_BITMAP)
-                    .setHandler(Handler(thread.looper)).setQuality(quality).setMaxImages(1).build().use { writer ->
-                        writer.start()
-                        writer.addBitmap(bitmap)
-                        writer.stop(30_000) // Published source uses milliseconds despite a doc typo.
-                    }
-            } finally {
-                thread.quitSafely()
-                thread.join(5_000)
+            storage.descriptor(output).use { descriptor ->
+                val thread = HandlerThread("PackHeifCallbacks").apply { start() }
+                try {
+                    HeifWriter.Builder(descriptor.fileDescriptor, bitmap.width, bitmap.height, HeifWriter.INPUT_MODE_BITMAP)
+                        .setHandler(Handler(thread.looper)).setQuality(quality).setMaxImages(1).build().use { writer ->
+                            writer.start()
+                            writer.addBitmap(bitmap)
+                            writer.stop(30_000) // Published source uses milliseconds despite a doc typo.
+                        }
+                } finally {
+                    thread.quitSafely()
+                    thread.join(5_000)
+                }
             }
             // Check actual device readability, sampled so validation stays small.
-            ImageDecoder.decodeBitmap(ImageDecoder.createSource(output)) { decoder, info, _ ->
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, output.uri)) { decoder, info, _ ->
                 check(info.size.width == bitmap.width && info.size.height == bitmap.height) { "HEIC 尺寸校验失败" }
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                 val factor = maxOf(info.size.width, info.size.height) / 64.0
@@ -109,22 +101,22 @@ class PackProcessor(private val context: Context) {
                     (info.size.height / factor.coerceAtLeast(1.0)).toInt().coerceAtLeast(1))
             }.recycle()
         } else {
-            output.outputStream().buffered().use {
+            storage.write(output).buffered().use {
                 check(bitmap.compress(if (format == OutputFormat.PNG) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, quality, it)) {
                     "图片编码失败"
                 }
             }
         }
-        check(output.length() > 0) { "编码结果为空" }
+        check(storage.size(output) > 0) { "编码结果为空" }
     }
 
     suspend fun process(uris: List<Uri>, settings: PackSettings, progress: (Int, Int) -> Unit): PackResult = withContext(Dispatchers.IO) {
         require(uris.isNotEmpty())
         val clock = TimeSource.Monotonic.markNow()
         val coroutine = currentCoroutineContext()
-        val run = PackCache(context).newRun()
+        val run = storage.newRun()
         val names = OutputNames()
-        val images = mutableListOf<File>()
+        val images = mutableListOf<StoredDocument>()
         val errors = mutableListOf<String>()
         val notes = mutableListOf<String>()
         var totalInput = 0L
@@ -134,7 +126,7 @@ class PackProcessor(private val context: Context) {
             uris.forEachIndexed { index, uri ->
                 coroutine.ensureActive()
                 var display = "图片 ${index + 1}"
-                val created = mutableListOf<File>()
+                val created = mutableListOf<StoredDocument>()
                 val noteStart = notes.size
                 try {
                     require(uri.scheme == "content") { "仅接受 content:// 图片 URI" }
@@ -152,15 +144,20 @@ class PackProcessor(private val context: Context) {
                         coroutine.ensureActive()
                         val bitmap = decode(uri, size, tile)
                         try {
-                            var file = File(run, primaryNames[tileIndex])
+                            val mime = when (settings.format) {
+                                OutputFormat.HEIC -> "image/heic"
+                                OutputFormat.PNG -> "image/png"
+                                OutputFormat.JPEG -> "image/jpeg"
+                            }
+                            var file = storage.createTemp(run, primaryNames[tileIndex], mime)
                             created.add(file)
                             try { encode(bitmap, file, settings.format, settings.quality) }
                             catch (e: Exception) {
                                 coroutine.ensureActive()
                                 if (settings.format != OutputFormat.HEIC) throw e
-                                file.delete()
+                                storage.delete(file)
                                 if (fallbackNames == null) fallbackNames = names.allocate(display, OutputFormat.PNG, tiles.size)
-                                file = File(run, fallbackNames!![tileIndex])
+                                file = storage.createTemp(run, fallbackNames!![tileIndex], "image/png")
                                 created.add(file)
                                 encode(bitmap, file, OutputFormat.PNG, 100)
                                 notes.add("${file.name}：HEIC 失败，已回退 PNG（${e.message ?: e.javaClass.simpleName}）")
@@ -172,13 +169,13 @@ class PackProcessor(private val context: Context) {
                 } catch (e: Exception) {
                     coroutine.ensureActive()
                     images.removeAll(created.toSet())
-                    created.forEach { it.delete() }
+                    created.forEach { runCatching { storage.delete(it) } }
                     while (notes.size > noteStart) notes.removeAt(notes.lastIndex)
                     errors.add("$display：${e.message ?: e.javaClass.simpleName}")
                 } catch (e: OutOfMemoryError) {
                     coroutine.ensureActive()
                     images.removeAll(created.toSet())
-                    created.forEach { it.delete() }
+                    created.forEach { runCatching { storage.delete(it) } }
                     while (notes.size > noteStart) notes.removeAt(notes.lastIndex)
                     errors.add("$display：设备解码或编码内存不足，请降低缩放比例")
                 }
@@ -186,18 +183,24 @@ class PackProcessor(private val context: Context) {
             }
             coroutine.ensureActive()
             if (images.isEmpty()) {
-                run.deleteRecursively()
+                runCatching { storage.cleanRun(run) }.onFailure { notes.add("临时文件清理未完成：${it.message}") }
                 return@withContext PackResult(null, uris.size, 0, 0, totalInput, unknownSizes, 0,
                     clock.elapsedNow().inWholeMilliseconds, settings, errors, notes)
             }
-            val imageBytes = images.sumOf { it.length() }
+            val imageBytes = images.sumOf { storage.size(it) }
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val zip = File(run, "GPT_Screenshots_$stamp.zip")
-            ImageZip.write(images, zip) { coroutine.ensureActive() }
-            images.forEach { it.delete() }
-            run.setLastModified(System.currentTimeMillis())
+            val staged = storage.createTemp(run, "GPT_Screenshots_$stamp.zip", "application/zip")
+            storage.write(staged).buffered().use { output ->
+                ImageZip.writeStreams(images.map { file -> ZipImage(file.name) { storage.read(file) } }, output) { coroutine.ensureActive() }
+            }
+            coroutine.ensureActive()
+            val zip = storage.publish(staged)
+            runCatching { storage.cleanRun(run) }.onFailure { notes.add("ZIP 已保存，临时文件清理未完成：${it.message}") }
             PackResult(zip, uris.size, successes, images.size, totalInput, unknownSizes, imageBytes,
                 clock.elapsedNow().inWholeMilliseconds, settings, errors, notes)
-        } catch (e: Throwable) { run.deleteRecursively(); throw e }
+        } catch (e: Throwable) {
+            runCatching { storage.cleanRun(run) }.onFailure { e.addSuppressed(it) }
+            throw e
+        }
     }
 }

@@ -21,7 +21,7 @@ class SettingsStore(context: Context) {
     private val heic = intPreferencesKey("heic_quality")
     private val jpeg = intPreferencesKey("jpeg_quality")
     val settings = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map {
-        PackSettings((it[scale] ?: 50).coerceIn(25, 100),
+        PackSettings((it[scale] ?: 100).coerceIn(25, 100),
             OutputFormat.entries.firstOrNull { f -> f.name == it[format] } ?: OutputFormat.HEIC,
             (it[heic] ?: 95).coerceIn(1, 100), (it[jpeg] ?: 95).coerceIn(1, 100))
     }

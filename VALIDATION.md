@@ -1,46 +1,42 @@
-# 第一版验证记录
+# v0.2.0 验证记录
 
-日期：2026-10-04，版本 0.1.0。最终源码本地构建环境：Temurin JDK 17.0.20.1、Gradle 8.13、Android Platform 36 r02、Build Tools 35.0.0。
+日期：2026-10-05（Asia/Shanghai），版本 0.2.0 / versionCode 2。在现有 0.1.0 项目和 GitHub main 历史上迭代，没有重建项目。
+
+环境：Temurin JDK 17.0.20.1、Gradle 8.13、Android Platform 36 r02、Build Tools 35.0.0。
 
 ```text
 ./gradlew build testDebugUnitTest lintDebug assembleDebugAndroidTest --console=plain
-BUILD SUCCESSFUL in 29s
-132 actionable tasks: 67 executed, 65 up-to-date
+BUILD SUCCESSFUL in 24s
+138 actionable tasks: 28 executed, 110 up-to-date
 ```
 
-Debug 与 Release 各运行 `PackRulesTest` 的 5 个测试；两种 variant 都无失败、错误或跳过，不把重复执行同一组测试说成 10 个不同测试。没有使用 Android mock 的默认返回值来掩盖失败。
+Debug / Release 各运行同一组 9 个单元测试，均 0 失败、0 错误、0 跳过。不是 18 个不同测试。检查覆盖默认 100%、质量/缩放快捷值、16384 阈值、均匀切片、IMG/中文/时间主体和重名命名、STORED / size / compressedSize / CRC32、10 MiB 生成流的双遍有界读写和关闭、CRC 变化拒绝、校验与写入阶段的取消清理、ZIP 只包含按顺序命名的图片以及空 ZIP 拒绝。
 
-Lint：No issues found。保持 warningsAsErrors / abortOnError，不建 baseline；仅豁免两个已说明的依赖/工具链更新建议。此前发现的 DataExtractionRules 问题已修复，并重新完整构建。
+Android Lint：**No issues found**。保持 abortOnError / warningsAsErrors，不使用 baseline；仅保留旧版明确说明的两类依赖/工具链更新建议豁免。
 
-APK 签名通过 `apksigner verify --verbose`，APK 级权限通过 `aapt dump permissions` 验证。唯一 uses-permission 为 AndroidX 动态接收器的应用内部 signature 权限，无 INTERNET、存储读写或媒体广泛访问权限。
+## 可安装 APK 与签名
 
-## 规格第 29 节验收状态
+- 主 APK：GPT-Screenshot-Pack-0.2.0-debug.apk，已验证 v2 签名。
+- 项目没有 release signing 配置，Release 构建为 unsigned；交付沿用原 debug keystore 的 Debug APK。
+- 与 0.1.0 的签名证书 SHA-256 一致：`e6026d6cf3d969afe91ca9a266d879d379ad8299dda863190a2c5c3fa082d354`。可以覆盖安装，签名密钥没有上传到仓库。
+- aapt 检查：applicationId=com.gptscreenshotpack、versionCode=2、versionName=0.2.0、minSdk=28、targetSdk=36。
+- 无 INTERNET 或 MANAGE_EXTERNAL_STORAGE。只有 WRITE_EXTERNAL_STORAGE 且 maxSdkVersion=28；Android 10+ 使用 MediaStore，不申请该权限。
 
-| 项 | 状态 / 证据 |
-| --- | --- |
-| 1 JPG → HEIC → ZIP | 设备测试已编译，待 Android 16 执行；HEIC 失败不算本项通过 |
-| 2 分享菜单多图 | 分享过滤器和顺序处理已实现，待实机完整流程 |
-| 3 PNG 输入 | 设备测试含 PNG 50 张，待执行 |
-| 4 HEIC 输入 | 设备测试含 HEIC 重新输入，待执行 |
-| 5 20～50 张不崩溃 | 已实现逐张释放；50 张 PNG 测试待执行，50 张真实 HEIC 待实机压力验证 |
-| 6 19399 px 长图 | 1440×19399 → 720×9700 的尺寸/不切片规则单测通过；设备测试含窄幅合成图，真实截图待验证 |
-| 7 >16384 自动切片 | 核心面积、顺序、均衡、阈值单测通过；设备测试含彩色分段逐像素顺序检查，待执行 |
-| 8 输出 HEIC 再解码 | 每次 HEIC 写入后自动做尺寸与缩略解码校验，设备往返测试待执行 |
-| 9 ZIP 解压 | JVM ZipFile 解压并逐字节比对通过 |
-| 10 ZIP 只含图片 | ZIP 项名称和顺序单测通过；打包拒绝空列表、重复名称和非图片扩展名 |
-| 11 原始名称主体 | Unicode 和时间主体单测通过 |
-| 12 resized_ | 单测通过 |
-| 13 切片 _1/_2/_3 | 命名和名称碰撞单测通过，设备输出测试待执行 |
-| 14 输入顺序 | ZIP 单测和切片单测通过；分享/选择器提供的输入顺序在处理层保留，系统实际提供顺序需实机确认 |
-| 15 Sharesheet 分享 ZIP | FileProvider、ClipData、临时读取授权已实现，待实机目标应用验证 |
-| 16 原文件不变 | 实现仅查询/解码输入 URI，输出和删除均限定应用缓存；设备字节比对测试待执行 |
-| 17 无网络权限 | 最终主 APK aapt 实查通过 |
-| 18 无明显泄漏 | finally / use / recycle / 自管回调线程已实现；文件句柄/native/GPU/线程压力观测待实机 |
-| 19 Gradle build | 最终完整构建通过 |
-| 20 Android Lint | 最终 lintDebug 通过，见上述显式建议豁免 |
+## 真实 Android 测试边界
 
-## 实机运行
+当前环境没有 Android 设备或可用模拟器，**4 个设备测试已编译但未执行**。其中包括 HEIC 原始尺寸往返、PNG 50 张与默认 100% 的长截图切片、像素顺序/PNG 色深、部分/全部失败、公有 Output 路径/IS_PENDING 发布、Temp 清理保留 Output、同名 ZIP 不覆盖以及分享过滤器。
 
-连接启用 USB 调试的 Android 16 设备后，先运行 `./gradlew connectedDebugAndroidTest`，再安装 Debug 主 APK，从相册实际分享 20～50 张截图。分别测试 HEIC/PNG/JPEG、19399 px 长截图、损坏输入、透明图片、取消、旋转、后台完成后返回和缓存清理。查看编码器信息；实际 codec/mode 为 Unknown 是稳定 API 的已记录限制。
+公共 MediaStore 的实际设备行为、Android 9 授权/移动、Android 16 文件选择器可见性、Sharesheet、真实长截图、50 张 HEIC 及 native/GPU 内存压力仍需实机验收。本地单元测试和 APK 编译不代表这些项目已经实机通过。
 
-分享接收方是否接受 ZIP 和 HEIC 需在实际 ChatGPT 应用中确认，不能由编译/单元测试推断。真实文字识别质量不属于当前合成图测试能够验证的内容。
+## 公共文件与取消
+
+- 最终 ZIP：`Download/GPT Screenshot Pack/Output/GPT_Screenshots_yyyyMMdd_HHmmss.zip`，同秒重名保留旧文件并追加后缀。
+- 中间文件和未完成 ZIP：`Download/GPT Screenshot Pack/Temp/<任务 UUID>/`。
+- Temp 的完成/失败/取消和 24 小时过期清理不会自动删除 Output；Output 只能通过用户确认后的“清理生成文件”操作清理本应用可访问的生成 ZIP。
+- 清理不访问原始输入 URI 的父目录。取消发生在公开发布完成之后时，完成的 ZIP 仍保留在 Output。
+
+## 发布过程
+
+源码和文档一起提交到当前 GitHub 仓库并创建 v0.2.0 tag。已验证/签名的 APK、源码 ZIP 和 SHA-256 文件存放在 downloads。优先直传 Release Assets；若执行环境的上传代理报 Content-Length 错误，使用仓库 workflow_dispatch 发布工作流从 GitHub runner 上传同一批校验过的文件，不重新签名、不上传 keystore。
+
+连接 Android 16 实机后运行 `./gradlew connectedDebugAndroidTest`，从相册真实分享截图，随后在 ChatGPT 对话的文件选择器进入“下载 → GPT Screenshot Pack → Output”选择 ZIP。接收方能否接受 ZIP/HEIC 和文字识别质量仍需实际确认。

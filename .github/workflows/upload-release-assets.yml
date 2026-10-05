@@ -1,0 +1,48 @@
+name: Upload verified release assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag and draft release (for example v0.2.0)
+        required: true
+        type: string
+
+# The workflow only uploads files already built/signed/verified locally.
+# This preserves the debug signing identity; no keystore is committed.
+permissions:
+  contents: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Validate version tag
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+      - name: Check out tagged artifacts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, pinned to verified commit
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - name: Verify artifact checksums
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          cd downloads
+          sha256sum --check "SHA256SUMS-$version.txt"
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          gh release view "$RELEASE_TAG" --repo "$GH_REPO"
+          gh release upload "$RELEASE_TAG" --repo "$GH_REPO" \
+            "downloads/GPT-Screenshot-Pack-$version-debug.apk" \
+            "downloads/GPT-Screenshot-Pack-$version-source.zip" \
+            "downloads/SHA256SUMS-$version.txt" --clobber

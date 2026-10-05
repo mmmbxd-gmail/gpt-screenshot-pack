@@ -1,10 +1,12 @@
 # GPT Screenshot Pack
 
+> 当前规格版本：0.2.0（2026-10-05）。在既有 Android 项目上迭代：默认 100%、公共 Downloads、STORED ZIP 和独立清理；公开 API 差异继续以 README 为准。
+
 ## 1. 项目目标
 
 开发一个个人使用的 Android 图片预处理工具，主要用于：
 
-**手机截图 → 缩小分辨率 → HEIC 编码 → ZIP 打包 → 分享至 ChatGPT**
+**手机截图 → 保留分辨率（默认 100%，可选缩放）→ HEIC 编码 → STORED ZIP → 公共 Downloads / 分享至 ChatGPT**
 
 主要目的：
 
@@ -113,10 +115,10 @@
 默认：
 
 ```text
-50%
+100%（保留原始分辨率）
 ```
 
-即宽度和高度同时按照相同比例缩放：
+如选择 50%，宽度和高度同时按照相同比例缩放：
 
 ```text
 1440 × 3200
@@ -146,7 +148,7 @@
 默认：
 
 ```text
-50%
+100%（保留原始分辨率）
 ```
 
 ---
@@ -213,6 +215,8 @@ HEIC
 推荐快捷值：
 
 ```text
+50
+75
 85
 90
 95
@@ -394,7 +398,7 @@ Disable CQ
 
 ```text
 输出格式：HEIC
-缩放比例：50%
+缩放比例：100%
 HEIC Quality：95
 编码器：Auto
 CQ：Auto
@@ -468,15 +472,15 @@ HEIF Grid
 19399 px
 ```
 
-默认 50% 缩放后约为：
+默认 100% 保持约 19399 px，超过 16384 px，因此均匀分为两片。
+
+如果手动选择 50%，缩放后约为：
 
 ```text
 9700 px
 ```
 
-因此普通系统长截图默认情况下不会触发切片。
-
-第一版不需要主动切割正常长截图。
+因此 50% 的上述长截图不会触发切片；默认 100% 则按最终尺寸执行切片，绝不偷偷缩小分辨率。
 
 ---
 
@@ -673,6 +677,8 @@ GPT_Screenshots_20261005_013022.zip
 
 ZIP 中的文件顺序应尽量保持原分享输入顺序。
 
+每项图片必须采用 `ZipEntry.STORED`：size 与 compressedSize 相等，预先流式计算 CRC32，再流式写入；不使用 DEFLATE，不把整张编码文件读入内存。ZIP 只作为图片容器。
+
 ---
 
 ## 19. 处理状态和技术信息
@@ -754,43 +760,27 @@ Unknown
 
 ## 21. 分享生成的 ZIP
 
-使用：
+Android 10+ 使用 MediaStore.Downloads 的 `content://` URI 分享公共 Output ZIP；Android 9 使用限定目录的 FileProvider。通过 ClipData、ACTION_SEND 和临时读取授权打开系统 Sharesheet，不暴露私有真实路径。
 
-```text
-FileProvider
-```
-
-将 ZIP 通过 `content://` URI 分享。
-
-给予必要的临时读取权限。
-
-完成后自动打开 Android 系统 Sharesheet。
-
-不得暴露真实私有文件系统路径。
+最终 ZIP 也可直接从 ChatGPT 的系统文件选择器选取，不要求经 Sharesheet 导入。
 
 ---
 
-## 22. 缓存
-
-处理后的中间文件和 ZIP 默认保存在应用缓存目录。
-
-默认：
+## 22. 公共 Downloads 与清理
 
 ```text
-24 小时后清理旧缓存
+Download/GPT Screenshot Pack/
+├── Temp/<任务 UUID>/   中间图片、尚未发布的 ZIP
+└── Output/            最终 ZIP
 ```
 
-也可以在应用启动时清理明显过期文件。
-
-提供：
-
-```text
-立即清理缓存
-```
-
-按钮。
-
-任何情况下不得删除原始截图。
+- Android 10+ 使用公开 MediaStore.Downloads / RELATIVE_PATH / IS_PENDING，不申请全盘权限；完整 ZIP 才移动到 Output 并发布。
+- Android 9 仅使用限定 maxSdkVersion=28 的存储授权，兼容已有最低版本。
+- 任务完成或失败/取消时清理本次 Temp；启动时只清理超过 24 小时的 Temp。
+- Output 不自动删除，已发布后收到取消请求也保留。
+- App 提供“清理临时文件”和“清理生成文件”两个独立按钮；前者不能删除 Output，后者需明确确认。
+- 清理范围只限本应用生成的文件；不得删除原始截图。处理时禁用清理，防止与编码/打包竞争。
+- ZIP 名称继续按生成时间命名，同名不覆盖；图片命名规则完全保持。
 
 ---
 
@@ -849,7 +839,7 @@ FileProvider
 GPT Screenshot Pack
 
 图片处理
-缩放比例          50%
+缩放比例          100%
 输出格式          HEIC
 HEIC 质量         95
 
@@ -874,7 +864,7 @@ ZIP 名称          按生成时间
 
 高级
 编码器信息
-缓存管理
+清理临时文件 / 清理生成文件
 关于
 ```
 
@@ -995,12 +985,12 @@ HEIC 100
 
 必须至少验证：
 
-1. 单张 JPG → 缩放 → HEIC → ZIP 成功。
+1. 单张 JPG → 默认保持分辨率（或所选缩放）→ HEIC → STORED ZIP 成功。
 2. 多张截图通过 Android 分享菜单批量处理成功。
 3. PNG 输入正常。
 4. HEIC 输入正常。
 5. 20～50 张截图连续处理不崩溃。
-6. 约 19399 px 高的系统长截图，在默认 50% 下正常处理。
+6. 约 19399 px 高的系统长截图，在默认 100% 下均匀切片；手动选择 50% 时保持单张。
 7. 超过 16384 px 的最终图片可以正确自动切片。
 8. 输出 HEIC 可以再次被 Android 正常解码。
 9. ZIP 可以正常解压。
@@ -1015,6 +1005,10 @@ HEIC 100
 18. 处理几十张图片不存在明显内存泄漏或文件句柄泄漏。
 19. Gradle 构建成功。
 20. Android Lint 没有未处理的重要错误。
+21. 最终 ZIP 位于公共 Download/GPT Screenshot Pack/Output/，系统文件选择器可见。
+22. 清理 Temp 不影响 Output，Output 不会自动删除。
+23. ZIP 每项为 STORED，size/压缩大小/CRC32 正确，采用流式读写。
+24. 默认 100%，HEIC/JPEG 的质量快捷值为 50/75/85/90/95/100，PNG 隐藏质量。
 
 ---
 
@@ -1052,3 +1046,7 @@ Codex 开始开发前应：
 - 自动切片逻辑；
 - 输出格式；
 - 文件命名规则。
+
+## 31. v0.2.0 保留与升级规则
+
+保留现有 HeifWriter / MediaCodec、CQ Auto、Grid Auto 和完整 Codec 诊断，不重建工程。0.1.0 实际使用稳定版 HeifWriter 1.1.0；Prefer Hardware/Software 与可选 CQ 未在旧版实现，0.2.0 不伪造这些能力，README 明确记录稳定公开 API 限制。版本升级至 0.2.0 / versionCode 2；保存的参数继续沿用，新安装或缺省设置默认 100%。若无 release signing，沿用已有 debug keystore 发布可安装 APK，并在 GitHub Release 注明。
