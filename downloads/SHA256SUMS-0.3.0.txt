@@ -1,0 +1,2 @@
+b1c4c57125d5d5d8f23a0ebb920f77f8857c8277f8a65a02fe4576f08b99d115  GPT-Screenshot-Pack-0.3.0-debug.apk
+04f5be781f974c3e74d5399123d441c538cd604d4a0aa1e8498c0e4c9fb79cb8  GPT-Screenshot-Pack-0.3.0-source.zip
