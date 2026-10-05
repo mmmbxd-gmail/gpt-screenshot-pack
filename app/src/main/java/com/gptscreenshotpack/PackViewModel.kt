@@ -38,7 +38,12 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.IO) { storage.cleanTemp(expiredOnly = true) }
                 val saved = store.settings.first()
                 mutable.update { it.copy(settings = saved, ready = true) }
+                // Keep an already-open main window aligned with confirmed share-mode preferences.
+                store.resolutionMode.collect { mode ->
+                    mutable.update { it.copy(settings = it.settings.copy(resolutionMode = mode)) }
+                }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 mutable.update { it.copy(ready = true, message = "设置读取失败，使用默认参数：${e.message}") }
             }
         }

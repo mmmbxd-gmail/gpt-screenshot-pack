@@ -8,9 +8,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.PackSettings
+import com.gptscreenshotpack.core.ResolutionMode
 import com.gptscreenshotpack.core.ZipNaming
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.datastore.preferences.core.emptyPreferences
 import java.io.IOException
 
@@ -24,6 +26,8 @@ class SettingsStore(context: Context) {
     private val jpeg = intPreferencesKey("jpeg_quality")
     private val zipBase = stringPreferencesKey("zip_name_base")
     private val zipDateTime = booleanPreferencesKey("zip_append_datetime")
+    private val mode = stringPreferencesKey("resolution_mode")
+    private val defaults = PackSettings()
     val zipNaming = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map {
         ZipNaming(it[zipBase] ?: "GPT_Screenshots", it[zipDateTime] ?: true)
     }
@@ -31,13 +35,20 @@ class SettingsStore(context: Context) {
         val naming = value.validated()
         store.edit { it[zipBase] = naming.base; it[zipDateTime] = naming.appendDateTime }
     }
-    val settings = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map {
-        PackSettings((it[scale] ?: 100).coerceIn(25, 100),
-            OutputFormat.entries.firstOrNull { f -> f.name == it[format] } ?: OutputFormat.HEIC,
-            (it[heic] ?: 95).coerceIn(1, 100), (it[jpeg] ?: 95).coerceIn(1, 100))
+    suspend fun saveShareOptions(value: ZipNaming, resolutionMode: ResolutionMode) {
+        val naming = value.validated()
+        // Only these three preferences change; saved quality, scale and any other keys are preserved.
+        store.edit { it[zipBase] = naming.base; it[zipDateTime] = naming.appendDateTime; it[mode] = resolutionMode.name }
     }
+    val settings = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map {
+        PackSettings((it[scale] ?: defaults.scalePercent).coerceIn(25, 100),
+            OutputFormat.entries.firstOrNull { f -> f.name == it[format] } ?: defaults.format,
+            (it[heic] ?: defaults.heicQuality).coerceIn(1, 100), (it[jpeg] ?: defaults.jpegQuality).coerceIn(1, 100),
+            ResolutionMode.entries.firstOrNull { m -> m.name == it[mode] } ?: defaults.resolutionMode)
+    }
+    val resolutionMode = settings.map { it.resolutionMode }.distinctUntilChanged()
     suspend fun save(value: PackSettings) {
         store.edit { it[scale] = value.scalePercent; it[format] = value.format.name
-            it[heic] = value.heicQuality; it[jpeg] = value.jpegQuality }
+            it[heic] = value.heicQuality; it[jpeg] = value.jpegQuality; it[mode] = value.resolutionMode.name }
     }
 }

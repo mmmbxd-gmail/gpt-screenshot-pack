@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ClipData
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import androidx.core.content.FileProvider
@@ -14,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.PackSettings
+import com.gptscreenshotpack.core.ResolutionMode
 import com.gptscreenshotpack.core.ZipNaming
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -78,7 +80,22 @@ class ShareFlowTest {
         while (scenario.state != Lifecycle.State.DESTROYED) delay(25)
     }
 
+    private fun assertDimensions(output: PackOutput, width: Int, height: Int) {
+        val inspect = File(fixtures, "dimensions.zip")
+        context.contentResolver.openInputStream(output.uri)!!.use { input -> inspect.outputStream().use { input.copyTo(it) } }
+        ZipFile(inspect).use { zip ->
+            zip.entries().asSequence().forEach { entry ->
+                val bytes = zip.getInputStream(entry).use { it.readBytes() }
+                val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(java.nio.ByteBuffer.wrap(bytes)))
+                try { assertEquals(width, bitmap.width); assertEquals(height, bitmap.height) }
+                finally { bitmap.recycle() }
+            }
+        }
+    }
+
     @Test fun namingRotationStoredZipAutoExitAndRememberedNextRequest() = runBlocking {
+        val configured = PackSettings(50, OutputFormat.PNG, 75, 90)
+        store.save(configured)
         val first = image("IMG20261005123801.png")
         val second = image("截图.png")
         val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
@@ -92,13 +109,19 @@ class ShareFlowTest {
                 val model = model(scenario)
                 val initial = awaitPhase(model, SharePhase.NAMING)
                 assertTrue(initial.naming.appendDateTime)
+                assertEquals(ResolutionMode.ORIGINAL, initial.resolutionMode)
+                assertEquals(50, initial.reducedScalePercent)
                 assertNull(initial.result)
                 val base = "聊天记录_${UUID.randomUUID()}"
-                scenario.onActivity { model.editName("$base.zip"); model.editDateTime(false) }
+                scenario.onActivity {
+                    model.editName("$base.zip"); model.editDateTime(false)
+                    model.editResolutionMode(ResolutionMode.REDUCED)
+                }
                 scenario.recreate()
                 assertSame(model, model(scenario))
                 assertEquals("$base.zip", model.state.value.naming.base)
                 assertFalse(model.state.value.naming.appendDateTime)
+                assertEquals(ResolutionMode.REDUCED, model.state.value.resolutionMode)
                 scenario.onActivity { model.confirm() }
                 val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
                 val output = checkNotNull(result.zip).also(outputs::add)
@@ -111,13 +134,23 @@ class ShareFlowTest {
                     zip.entries().asSequence().forEach { assertEquals(ZipEntry.STORED, it.method) }
                 }
                 awaitClosed(scenario)
+                assertDimensions(output, 8, 12)
+                assertEquals(configured.copy(resolutionMode = ResolutionMode.REDUCED), store.settings.first())
                 assertEquals(ZipNaming(base, false), store.zipNaming.first())
             }
             ActivityScenario.launch<ShareActivity>(single(first)).use { scenario ->
                 val model = model(scenario)
                 val next = awaitPhase(model, SharePhase.NAMING)
                 assertEquals(store.zipNaming.first(), next.naming)
-                scenario.onActivity { model.close() }
+                assertEquals(ResolutionMode.REDUCED, next.resolutionMode)
+                assertEquals(50, next.reducedScalePercent)
+                scenario.onActivity { model.editResolutionMode(ResolutionMode.ORIGINAL); model.confirm() }
+                val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
+                val output = checkNotNull(result.zip).also(outputs::add)
+                assertDimensions(output, 16, 24) // Original ignores the saved 50% reduction ratio.
+                assertEquals(100, result.settings.effectiveScalePercent)
+                assertEquals(50, result.settings.scalePercent)
+                assertEquals(configured, store.settings.first()) // Both saved qualities are untouched.
                 awaitClosed(scenario)
             }
             assertEquals("Sharing must never open the main screen", 0, monitor.hits)

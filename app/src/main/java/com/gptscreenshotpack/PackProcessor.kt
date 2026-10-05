@@ -133,10 +133,10 @@ class PackProcessor(private val context: Context) {
                     val meta = metadata(uri, index)
                     display = meta.first
                     meta.second?.let { totalInput += it } ?: run { unknownSizes++ }
-                    val size = dimensions(uri).scaled(settings.scalePercent)
+                    val size = settings.targetDimensions(dimensions(uri))
                     // Cropping limits returned bitmap size, not all decoder internal allocations.
                     val budget = minOf(192L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 3)
-                    require(size.width.toLong() * size.height * 4 <= budget) { "目标图片超出本机安全内存预算，请降低缩放比例" }
+                    require(size.width.toLong() * size.height * 4 <= budget) { "目标图片超出本机安全内存预算，请选择降低分辨率并调低其比例" }
                     val tiles = Slicing.plan(size)
                     val primaryNames = names.allocate(display, settings.format, tiles.size)
                     var fallbackNames: List<String>? = null
@@ -177,7 +177,7 @@ class PackProcessor(private val context: Context) {
                     images.removeAll(created.toSet())
                     created.forEach { runCatching { storage.delete(it) } }
                     while (notes.size > noteStart) notes.removeAt(notes.lastIndex)
-                    errors.add("$display：设备解码或编码内存不足，请降低缩放比例")
+                    errors.add("$display：设备解码或编码内存不足，请选择降低分辨率并调低其比例")
                 }
                 progress(index + 1, uris.size)
             }

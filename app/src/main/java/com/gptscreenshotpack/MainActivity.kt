@@ -82,7 +82,10 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
             } else {
                 val settings = state.settings
                 val enabled = state.ready && !state.busy && !state.awaitingStoragePermission
-                Text("缩放比例：${settings.scalePercent}%")
+                ResolutionOptions(settings.resolutionMode, settings.scalePercent,
+                    onChange = { model.setSettings(settings.copy(resolutionMode = it)) }, enabled = enabled)
+                Text("降低分辨率比例：${settings.scalePercent}%")
+                Text("仅在“降低分辨率”模式生效；“原始分辨率”始终保留输入宽高。", style = MaterialTheme.typography.bodySmall)
                 Slider(value = settings.scalePercent.toFloat(), onValueChange = {
                     model.setSettings(settings.copy(scalePercent = it.roundToInt()))
                 }, valueRange = 25f..100f, steps = 74, enabled = enabled)
@@ -120,7 +123,7 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
                     Text("成功：${result.successCount} · 失败：${result.errors.size} · 输入：${result.inputCount} · 输出：${result.outputCount}")
                     Text("原始已知大小：${bytes(result.inputBytes)}" + if (result.unknownInputSizes > 0) "（${result.unknownInputSizes} 张大小未知）" else "")
                     Text("输出图片：${bytes(result.outputBytes)} · ZIP：${bytes(result.zip?.size ?: 0)}")
-                    Text("耗时：${result.elapsedMs} ms · 缩放：${result.settings.scalePercent}% · 格式：${result.settings.format}" +
+                    Text("耗时：${result.elapsedMs} ms · 实际比例：${result.settings.effectiveScalePercent}% · 格式：${result.settings.format}" +
                         if (result.settings.format == OutputFormat.PNG) "" else " · 质量：${result.settings.quality}")
                     Text("实际 codec / 硬件加速 / bitrate mode：Unknown", style = MaterialTheme.typography.bodySmall)
                     result.notes.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }

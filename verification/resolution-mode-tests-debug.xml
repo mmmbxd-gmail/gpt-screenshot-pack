@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.gptscreenshotpack.core.ResolutionModeTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-05T06:55:20.479Z" hostname="58f1db63e923" time="0.001">
+  <properties/>
+  <testcase name="originalIgnoresStoredReductionRatioAndStillSlicesLongImages" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.001"/>
+  <testcase name="reducedUsesConfiguredRatioBeforeSlicing" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.0"/>
+  <testcase name="modeChangesLeaveRatioFormatAndIndependentQualitiesUnchanged" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

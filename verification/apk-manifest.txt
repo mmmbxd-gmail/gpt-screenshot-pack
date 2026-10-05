@@ -1,7 +1,7 @@
 N: android=http://schemas.android.com/apk/res/android
   E: manifest (line=2)
-    A: android:versionCode(0x0101021b)=(type 0x10)0x3
-    A: android:versionName(0x0101021c)="0.3.0" (Raw: "0.3.0")
+    A: android:versionCode(0x0101021b)=(type 0x10)0x4
+    A: android:versionName(0x0101021c)="0.4.0" (Raw: "0.4.0")
     A: android:compileSdkVersion(0x01010572)=(type 0x10)0x24
     A: android:compileSdkVersionCodename(0x01010573)="16" (Raw: "16")
     A: package="com.gptscreenshotpack" (Raw: "com.gptscreenshotpack")

@@ -77,7 +77,7 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
     AlertDialog(
         onDismissRequest = model::close,
         title = { Text(when (state.phase) {
-            SharePhase.NAMING -> "ZIP 文件名"
+            SharePhase.NAMING -> "本次任务设置"
             SharePhase.ERROR -> "未生成 ZIP"
             SharePhase.CANCELLING -> "正在取消"
             else -> "GPT Screenshot Pack"
@@ -85,7 +85,7 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (naming) {
-                    Text("收到 ${state.inputCount} 张图片，使用主界面中保存的图像设置。")
+                    Text("收到 ${state.inputCount} 张图片")
                     OutlinedTextField(value = state.naming.base, onValueChange = model::editName,
                         label = { Text("文件名主体") }, singleLine = true,
                         isError = state.error != null, modifier = Modifier.fillMaxWidth())
@@ -94,6 +94,7 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
                         Switch(checked = state.naming.appendDateTime, onCheckedChange = model::editDateTime)
                     }
                     Text("自动补 .zip" + if (state.naming.appendDateTime) "；日期格式 yyyyMMdd_HHmmss" else "")
+                    ResolutionOptions(state.resolutionMode, state.reducedScalePercent, model::editResolutionMode)
                     Text("保存到：${PackStorage.OUTPUT_PATH}", style = MaterialTheme.typography.bodySmall)
                 } else if (state.phase != SharePhase.ERROR) {
                     Text(when (state.phase) {
@@ -115,7 +116,7 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
             else if (state.phase == SharePhase.ERROR) TextButton(onClick = model::close) { Text("关闭") }
         },
         dismissButton = {
-            if (state.phase == SharePhase.ERROR && state.canRetry) TextButton(onClick = model::retry) { Text("重新命名") }
+            if (state.phase == SharePhase.ERROR && state.canRetry) TextButton(onClick = model::retry) { Text("修改设置") }
             else if (state.phase == SharePhase.ERROR) Unit
             else TextButton(onClick = model::close, enabled = state.phase != SharePhase.CANCELLING) { Text("取消") }
         },

@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.gptscreenshotpack.core.PackSettings
+import com.gptscreenshotpack.core.ResolutionMode
 import com.gptscreenshotpack.core.ZipNaming
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,7 @@ data class ShareUiState(
     val naming: ZipNaming = ZipNaming(), val inputCount: Int = 0, val done: Int = 0,
     val error: String? = null, val askStoragePermission: Boolean = false,
     val result: PackResult? = null, val canRetry: Boolean = false,
+    val resolutionMode: ResolutionMode = ResolutionMode.ORIGINAL, val reducedScalePercent: Int = 100,
 )
 
 /** Separate request lifetime: launching from Sharesheet never constructs the main screen/model. */
@@ -57,7 +59,11 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
                     base = savedState.get<String>("base") ?: saved.base,
                     appendDateTime = savedState.get<Boolean>("dateTime") ?: saved.appendDateTime,
                 )
-                mutable.update { it.copy(phase = SharePhase.NAMING, naming = naming) }
+                val mode = savedState.get<String>("resolutionMode")?.let { name ->
+                    ResolutionMode.entries.firstOrNull { it.name == name }
+                } ?: settings.resolutionMode
+                mutable.update { it.copy(phase = SharePhase.NAMING, naming = naming,
+                    resolutionMode = mode, reducedScalePercent = settings.scalePercent) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { fail("无法读取设置：${e.message}") }
         }
@@ -73,16 +79,23 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
         savedState["dateTime"] = enabled
         mutable.update { it.copy(naming = it.naming.copy(appendDateTime = enabled), error = null) }
     }
+    fun editResolutionMode(mode: ResolutionMode) {
+        if (mutable.value.phase != SharePhase.NAMING) return
+        savedState["resolutionMode"] = mode.name
+        mutable.update { it.copy(resolutionMode = mode) }
+    }
 
     fun confirm() {
         if (mutable.value.phase != SharePhase.NAMING) return
         val naming = try { mutable.value.naming.validated() }
         catch (e: IllegalArgumentException) { mutable.update { it.copy(error = e.message) }; return }
+        val mode = mutable.value.resolutionMode
         fileName = naming.fileName() // Device-local time at confirmation, fixed for this request.
         mutable.update { it.copy(phase = SharePhase.PREPARING, naming = naming, error = null) }
         job = viewModelScope.launch {
             try {
-                store.saveZipNaming(naming)
+                settings = store.settings.first().copy(resolutionMode = mode)
+                store.saveShareOptions(naming, mode)
                 if (PackStorage.hasPermission(getApplication())) process()
                 else mutable.update { it.copy(phase = SharePhase.PERMISSION, askStoragePermission = true) }
             } catch (e: CancellationException) { throw e }

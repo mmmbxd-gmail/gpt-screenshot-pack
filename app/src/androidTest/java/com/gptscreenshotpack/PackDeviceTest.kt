@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.PackSettings
+import com.gptscreenshotpack.core.ResolutionMode
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -101,7 +102,7 @@ class PackDeviceTest {
         val long = fixture("long.png", 32, 19399)
         val longResult = process(listOf(long), settings)
         assertEquals(2, longResult.outputCount) // 100% now slices this long image.
-        val half = process(listOf(long), settings.copy(scalePercent = 50))
+        val half = process(listOf(long), settings.copy(scalePercent = 50, resolutionMode = ResolutionMode.REDUCED))
         assertEquals(1, half.outputCount)
         val huge = fixture("tall.png", 32, 28000)
         val banded = Bitmap.createBitmap(32, 28000, Bitmap.Config.ARGB_8888)

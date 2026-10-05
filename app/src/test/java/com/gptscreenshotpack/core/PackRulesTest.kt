@@ -17,7 +17,8 @@ class PackRulesTest {
     @Test fun defaultsAndLongScreenshot() {
         val settings = PackSettings()
         assertEquals(OutputFormat.HEIC, settings.format)
-        assertEquals(95, settings.quality)
+        assertEquals(85, settings.quality)
+        assertEquals(95, settings.copy(format = OutputFormat.JPEG).quality)
         assertEquals(100, settings.scalePercent)
         assertEquals(Dimensions(1440, 3200), Dimensions(1440, 3200).scaled(settings.scalePercent))
         assertEquals(2, Slicing.plan(Dimensions(1440, 19399).scaled(settings.scalePercent)).size)

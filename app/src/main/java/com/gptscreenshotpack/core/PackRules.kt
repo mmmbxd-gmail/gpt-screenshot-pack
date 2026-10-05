@@ -9,18 +9,23 @@ import java.util.zip.ZipOutputStream
 import kotlin.math.roundToInt
 
 enum class OutputFormat(val extension: String) { HEIC("heic"), PNG("png"), JPEG("jpg") }
+enum class ResolutionMode { ORIGINAL, REDUCED }
 
 data class PackSettings(
     val scalePercent: Int = 100,
     val format: OutputFormat = OutputFormat.HEIC,
-    val heicQuality: Int = 95,
+    val heicQuality: Int = 85,
     val jpegQuality: Int = 95,
+    val resolutionMode: ResolutionMode = ResolutionMode.ORIGINAL,
 ) {
     init {
         require(scalePercent in 25..100)
         require(heicQuality in 1..100 && jpegQuality in 1..100)
     }
     val quality: Int get() = if (format == OutputFormat.JPEG) jpegQuality else heicQuality
+    val effectiveScalePercent: Int get() = if (resolutionMode == ResolutionMode.ORIGINAL) 100 else scalePercent
+    fun targetDimensions(input: Dimensions): Dimensions =
+        if (resolutionMode == ResolutionMode.ORIGINAL) input else input.scaled(scalePercent)
 }
 
 object PackPresets {
