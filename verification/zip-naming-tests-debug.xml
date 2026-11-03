@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.gptscreenshotpack.core.ZipNamingTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-03T14:07:33.452Z" hostname="7f57f5f7a4ee" time="0.088">
+<testsuite name="com.gptscreenshotpack.core.ZipNamingTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-03T17:56:06.597Z" hostname="7f57f5f7a4ee" time="0.072">
   <properties/>
-  <testcase name="disablingDateTimeAndPastedExtensionsDoNotDuplicateZip" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.011"/>
-  <testcase name="reservesUtf8BytesForTimeAndCollisionSuffix" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.031"/>
-  <testcase name="defaultsKeepLegacyBaseAndEnableDateTime" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.0"/>
-  <testcase name="timestampUsesDeviceTimeZoneAndRequestedFormat" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.039"/>
-  <testcase name="rejectsBlankTraversalControlAndUnsupportedFileCharacters" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.002"/>
+  <testcase name="disablingDateTimeAndPastedExtensionsDoNotDuplicateZip" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.038"/>
+  <testcase name="reservesUtf8BytesForTimeAndCollisionSuffix" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.02"/>
+  <testcase name="defaultsKeepLegacyBaseAndEnableDateTime" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.001"/>
+  <testcase name="timestampUsesDeviceTimeZoneAndRequestedFormat" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.004"/>
+  <testcase name="rejectsBlankTraversalControlAndUnsupportedFileCharacters" classname="com.gptscreenshotpack.core.ZipNamingTest" time="0.005"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

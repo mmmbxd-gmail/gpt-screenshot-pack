@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.gptscreenshotpack.core.ResolutionModeTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-11-03T14:07:41.341Z" hostname="7f57f5f7a4ee" time="0.022">
+<testsuite name="com.gptscreenshotpack.core.ResolutionModeTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-11-03T17:56:11.655Z" hostname="7f57f5f7a4ee" time="0.016">
   <properties/>
   <testcase name="originalIgnoresStoredReductionRatioAndStillSlicesLongImages" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.001"/>
   <testcase name="reducedUsesConfiguredRatioBeforeSlicing" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.0"/>
-  <testcase name="invalidWidthsAndOverflowingHeightsAreRejected" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.002"/>
+  <testcase name="invalidWidthsAndOverflowingHeightsAreRejected" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.004"/>
   <testcase name="newDefaultsAndLegacyModeNamesRemainStable" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.004"/>
-  <testcase name="specifiedWidthKeepsAspectForPortraitLandscapeAndMixedInputs" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.0"/>
-  <testcase name="widthCanEnlargeAndRoundedHeightNeverBecomesZero" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.004"/>
+  <testcase name="specifiedWidthKeepsAspectForPortraitLandscapeAndMixedInputs" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.003"/>
+  <testcase name="widthCanEnlargeAndRoundedHeightNeverBecomesZero" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.001"/>
   <testcase name="specifiedWidthStillSlicesBothAxesAtExistingThreshold" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.0"/>
   <testcase name="modeChangesLeaveRatioFormatAndIndependentQualitiesUnchanged" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.0"/>
   <testcase name="secondScaleIsIndependentAndUsesExistingRoundingAndSlicing" classname="com.gptscreenshotpack.core.ResolutionModeTest" time="0.0"/>
