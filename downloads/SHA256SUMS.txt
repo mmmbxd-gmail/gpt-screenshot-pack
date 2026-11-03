@@ -1,2 +1,2 @@
-eec42f8ff30753d610e03309ffd3f874393bc756b57a2a7e76a8bfb6a2625beb  GPT-Screenshot-Pack-0.6.0.apk
-2010f4b71665d5c94817422f95deebef933225e3fe1e703dd23393870d48e82d  GPT-Screenshot-Pack-0.6.0-source.zip
+69847f2df85d9bf9226a054cafa22acd1be268c9fd46192c71f87b382df0cc34  GPT-Screenshot-Pack-0.6.1.apk
+f438ca5ffc1865059d63ea4dd15006f19c4e1bb0fbce00416f4b45675ee45410  GPT-Screenshot-Pack-0.6.1-source.zip
