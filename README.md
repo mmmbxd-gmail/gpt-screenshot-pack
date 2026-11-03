@@ -4,9 +4,9 @@ Android 本地截图预处理工具，Kotlin + Compose，Android 9（API 28）�
 
 ## 下载 APK
 
-[下载 v0.6.0 APK](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/download/v0.6.0/GPT-Screenshot-Pack-0.6.0.apk) · [Release 页面](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/tag/v0.6.0)
+[下载 v0.6.1 APK](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/download/v0.6.1/GPT-Screenshot-Pack-0.6.1.apk) · [Release 页面](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/releases/tag/v0.6.1)
 
-0.6.0 提供非 debuggable 的 Release APK，继续使用 0.1.0～0.5.0 的同一开发签名证书，支持覆盖安装。签名备份由 Google Drive 恢复并核对证书；密钥不进入源码、GitHub 或发行附件。通过本机环境变量可选配置签名，未配置时 release 为 unsigned。发行附件同时提供干净源码 ZIP 和 SHA-256 校验文件。验证详情见 [VALIDATION.md](VALIDATION.md)。
+0.6.1 提供非 debuggable 的 Release APK，继续使用 0.1.0～0.6.0 的同一开发签名证书，支持覆盖安装。签名备份由 Google Drive 恢复并核对证书；密钥不进入源码、GitHub 或发行附件。通过本机环境变量可选配置签名，未配置时 release 为 unsigned。发行附件同时提供干净源码 ZIP 和 SHA-256 校验文件。验证详情见 [VALIDATION.md](VALIDATION.md)。
 
 ## 使用
 
@@ -18,6 +18,7 @@ Android 本地截图预处理工具，Kotlin + Compose，Android 9（API 28）�
 - **按缩放比例 B**：新增独立的 `scale_b` 偏好，默认 75%，可在主界面自定义 25%～100%，保留与 A 相同的快捷值。修改 B 不改变 A；模式只使用自己对应的参数。
 - **按指定宽度（保持比例）**：新增 `target_width` 偏好，默认 1080 px。主界面和分享小窗均可输入正整数宽度；确认分享后记住宽度，已打开的主界面也会同步。输出宽度精确等于设定值，高度按 `原始高度 × 指定宽度 / 原始宽度` 四舍五入且至少为 1；可缩小也可放大，不裁切、不拉伸。多张输入逐张按各自长宽比计算。空白、零、负数、小数、超出整数范围均在小窗内提示且不启动任务；计算高度溢出或超出原有安全内存预算时跳过该张并报告原因。
 - 主界面保留 A 的滑杆和快捷值，新增 B 滑杆/快捷值及宽度输入；桌面测试与分享使用同一套 `PackSettings.targetDimensions` 计算，随后进入原有切片、ImageDecoder、编码、ZIP 和保存流程，不重做架构。原始模式始终保留输入宽高，忽略 A/B/宽度参数。
+- 主界面“选择图片并测试”旁新增 **再次测试**：选择图片并完成一次测试后，调整 A/B、宽度、分辨率模式或质量，再点此按钮即可使用最近选择的原图重新处理，无需重新选图；多张图片也按原顺序复用。每次都重新读取原图，避免对上一次结果反复缩放。尚未选图、任务处理中或等待存储授权时禁用。选择器取消后保留上一次选择；重新选择图片后替换。当前页面的 ViewModel 保留选择并支持旋转；应用重新启动后需重新选图，不永久保存图片或 URI。每次仍生成独立 ZIP，不覆盖先前输出。
 - 输出格式仅在每次分享的小窗选择；没有记录时默认 **HEIC**，已有 `format` 偏好沿用，主界面不再提供格式按钮，也不写这个偏好。桌面测试继续使用最近确认的分享格式，主界面只显示该格式说明。
 - 主界面分别保留 HEIC、JPEG 的长期质量设置（范围 1～100）；新安装或质量键缺失时 HEIC 使用 **85**，JPEG 使用 **95**，两组快捷值仍为 **50 / 75 / 85 / 90 / 95 / 100**。分享小窗不显示质量控制；PNG 无有损质量参数。升级不重置已有质量、比例或编码器/CQ/诊断；分享确认只更新名称、日期、模式、格式，并在宽度模式下更新宽度；不改写 A/B、质量或高级设置。
 - HEIC 失败（含输出无法再次解码）时自动回退 PNG；主界面结果页显示实际回退文件和原因。单张失败跳过，有可用图片时保存 ZIP 并退出，提示成功/失败数量及 PNG 回退。全部失败不生成 ZIP，分享窗口保留错误提示，可重新命名重试或关闭。
@@ -98,7 +99,7 @@ Lint 使用 `abortOnError=true` 与 `warningsAsErrors=true`，不使用 baseline
 
 ## 验收状态
 
-0.6.0 的最终构建、单元测试、Lint、签名及设备验证边界见 [VALIDATION.md](VALIDATION.md) 和 `verification/`。新增单元测试覆盖 B 独立性、宽度等比缩放、四舍五入、放大、极小尺寸、高度溢出及切片；设备测试覆盖小窗下拉布局、宽度验证/旋转/记忆/取消、真实 PNG 输出尺寸和主界面同步。硬件 HEIC、厂商相册分享和第三方上传兼容性需在目标手机确认。
+0.6.1 的最终构建、单元测试、Lint、签名及设备验证边界见 [VALIDATION.md](VALIDATION.md) 和 `verification/`。新增单元测试覆盖 B 独立性、宽度等比缩放、四舍五入、放大、极小尺寸、高度溢出及切片；设备测试覆盖小窗下拉布局、宽度验证/旋转/记忆/取消、真实 PNG 输出尺寸和主界面同步。硬件 HEIC、厂商相册分享和第三方上传兼容性需在目标手机确认。
 
 ## 本机签名构建
 

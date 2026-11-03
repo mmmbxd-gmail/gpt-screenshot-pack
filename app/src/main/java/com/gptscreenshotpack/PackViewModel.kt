@@ -23,6 +23,7 @@ data class PackUiState(
     val diagnostics: String? = null,
     val askStoragePermission: Boolean = false, val awaitingStoragePermission: Boolean = false,
     val busyLabel: String = "正在处理图片",
+    val selectedInputCount: Int = 0,
 )
 
 class PackViewModel(application: Application) : AndroidViewModel(application) {
@@ -32,6 +33,7 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<PackUiState> = mutable
     private var job: Job? = null
     private var pendingStart: List<Uri>? = null
+    private var selectedInputs: List<Uri> = emptyList()
     init {
         viewModelScope.launch {
             try {
@@ -59,19 +61,23 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
     fun start(uris: List<Uri>) {
         if (mutable.value.busy || mutable.value.awaitingStoragePermission) { message("正在处理上一个请求，请稍后重试分享"); return }
         if (uris.isEmpty()) { message("没有收到可读取的图片"); return }
+        // Keep source URIs for this screen's lifetime; each run decodes the originals again.
+        val inputs = uris.toList()
+        selectedInputs = inputs
+        mutable.update { it.copy(selectedInputCount = inputs.size) }
         if (!PackStorage.hasPermission(getApplication())) {
-            pendingStart = uris.toList()
+            pendingStart = inputs
             mutable.update { it.copy(askStoragePermission = true, awaitingStoragePermission = true) }
             return
         }
-        mutable.update { it.copy(busy = true, done = 0, total = uris.size, result = null, message = null,
+        mutable.update { it.copy(busy = true, done = 0, total = inputs.size, result = null, message = null,
             busyLabel = "正在处理图片") }
         job = viewModelScope.launch {
             try {
                 // Wait for initialization without using stale defaults on an incoming share.
                 state.first { it.ready }
                 val settings = mutable.value.settings
-                val result = PackProcessor(getApplication()).process(uris, settings) { done, total ->
+                val result = PackProcessor(getApplication()).process(inputs, settings) { done, total ->
                     mutable.update { it.copy(done = done, total = total) }
                 }
                 mutable.update { it.copy(busy = false, result = result) }
@@ -82,6 +88,10 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
                 mutable.update { it.copy(busy = false, message = "处理失败：${e.message}") }
             }
         }
+    }
+    fun retest() {
+        if (selectedInputs.isEmpty()) { message("请先选择图片再测试"); return }
+        start(selectedInputs)
     }
     fun cancel() { job?.cancel() }
     fun permissionDialogLaunching() { mutable.update { it.copy(askStoragePermission = false) } }

@@ -121,8 +121,16 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
                 Text("编码器：自动 · CQ：自动 · Grid：自动")
                 Text("最终尺寸超过 16384 px 自动均匀切片\n文件名前缀：resized_\nHEIC 编码失败时回退 PNG", style = MaterialTheme.typography.bodySmall)
                 Text("输出格式在分享小窗选择；桌面测试使用最近选择：${settings.format}", style = MaterialTheme.typography.bodySmall)
-                Button(onClick = { picker.launch(arrayOf("image/*")) },
-                    enabled = enabled && (settings.resolutionMode != ResolutionMode.WIDTH || widthValue != null)) { Text("选择图片并测试") }
+                val testEnabled = enabled && (settings.resolutionMode != ResolutionMode.WIDTH || widthValue != null)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { picker.launch(arrayOf("image/*")) }, enabled = testEnabled,
+                        modifier = Modifier.weight(1.4f)) { Text("选择图片并测试") }
+                    OutlinedButton(onClick = model::retest, enabled = testEnabled && state.selectedInputCount > 0,
+                        modifier = Modifier.weight(1f)) { Text("再次测试") }
+                }
+                if (state.selectedInputCount > 0)
+                    Text("复用最近选择的 ${state.selectedInputCount} 张原图，使用当前参数再次测试。",
+                        style = MaterialTheme.typography.bodySmall)
                 state.result?.let { result ->
                     HorizontalDivider()
                     Text("成功：${result.successCount} · 失败：${result.errors.size} · 输入：${result.inputCount} · 输出：${result.outputCount}")
