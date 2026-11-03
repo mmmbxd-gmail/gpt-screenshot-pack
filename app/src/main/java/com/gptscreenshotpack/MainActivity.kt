@@ -14,11 +14,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.PackPresets
+import com.gptscreenshotpack.core.ResolutionMode
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -82,19 +84,25 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
             } else {
                 val settings = state.settings
                 val enabled = state.ready && !state.busy && !state.awaitingStoragePermission
-                ResolutionOptions(settings.resolutionMode, settings.scalePercent,
+                ResolutionOptions(settings.resolutionMode, settings.scalePercent, settings.scalePercentB,
                     onChange = { model.setSettings(settings.copy(resolutionMode = it)) }, enabled = enabled)
-                Text("降低分辨率比例：${settings.scalePercent}%")
-                Text("仅在“降低分辨率”模式生效；“原始分辨率”始终保留输入宽高。", style = MaterialTheme.typography.bodySmall)
-                Slider(value = settings.scalePercent.toFloat(), onValueChange = {
-                    model.setSettings(settings.copy(scalePercent = it.roundToInt()))
-                }, valueRange = 25f..100f, steps = 74, enabled = enabled)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    PackPresets.scales.forEach { value ->
-                        TextButton(onClick = { model.setSettings(settings.copy(scalePercent = value)) },
-                            enabled = enabled, contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text("$value") }
-                    }
+                ScaleControl("默认缩放比例 A", settings.scalePercent, enabled) {
+                    model.setSettings(settings.copy(scalePercent = it))
                 }
+                ScaleControl("缩放比例 B", settings.scalePercentB, enabled) {
+                    model.setSettings(settings.copy(scalePercentB = it))
+                }
+                var width by rememberSaveable { mutableStateOf(settings.targetWidth.toString()) }
+                LaunchedEffect(settings.targetWidth) { width = settings.targetWidth.toString() }
+                val widthValue = width.toIntOrNull()?.takeIf { it > 0 }
+                TargetWidthField(width, onChange = {
+                    width = it
+                    it.toIntOrNull()?.takeIf { value -> value > 0 }?.let { value ->
+                        model.setSettings(settings.copy(targetWidth = value))
+                    }
+                }, enabled = enabled, error = if (widthValue == null) "请输入有效的正整数宽度（px）" else null)
+                Text("各参数仅用于对应模式；按宽度缩放时高度保持比例。分享小窗也可修改宽度。",
+                    style = MaterialTheme.typography.bodySmall)
                 listOf(OutputFormat.HEIC, OutputFormat.JPEG).forEach { format ->
                     val currentQuality = if (format == OutputFormat.HEIC) settings.heicQuality else settings.jpegQuality
                     Text("$format 质量：$currentQuality")
@@ -113,13 +121,14 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
                 Text("编码器：自动 · CQ：自动 · Grid：自动")
                 Text("最终尺寸超过 16384 px 自动均匀切片\n文件名前缀：resized_\nHEIC 编码失败时回退 PNG", style = MaterialTheme.typography.bodySmall)
                 Text("输出格式在分享小窗选择；桌面测试使用最近选择：${settings.format}", style = MaterialTheme.typography.bodySmall)
-                Button(onClick = { picker.launch(arrayOf("image/*")) }, enabled = enabled) { Text("选择图片并测试") }
+                Button(onClick = { picker.launch(arrayOf("image/*")) },
+                    enabled = enabled && (settings.resolutionMode != ResolutionMode.WIDTH || widthValue != null)) { Text("选择图片并测试") }
                 state.result?.let { result ->
                     HorizontalDivider()
                     Text("成功：${result.successCount} · 失败：${result.errors.size} · 输入：${result.inputCount} · 输出：${result.outputCount}")
                     Text("原始已知大小：${bytes(result.inputBytes)}" + if (result.unknownInputSizes > 0) "（${result.unknownInputSizes} 张大小未知）" else "")
                     Text("输出图片：${bytes(result.outputBytes)} · ZIP：${bytes(result.zip?.size ?: 0)}")
-                    Text("耗时：${result.elapsedMs} ms · 实际比例：${result.settings.effectiveScalePercent}% · 格式：${result.settings.format}" +
+                    Text("耗时：${result.elapsedMs} ms · ${result.settings.resolutionSummary()} · 格式：${result.settings.format}" +
                         if (result.settings.format == OutputFormat.PNG) "" else " · 质量：${result.settings.quality}")
                     Text("实际 codec / 硬件加速 / bitrate mode：Unknown", style = MaterialTheme.typography.bodySmall)
                     result.notes.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -153,3 +162,18 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
 }
 
 private fun bytes(value: Long): String = String.format(Locale.getDefault(), "%.2f MiB", value / 1048576.0)
+
+@Composable
+private fun ScaleControl(label: String, percent: Int, enabled: Boolean, onChange: (Int) -> Unit) {
+    Column {
+        Text("$label：$percent%")
+        Slider(value = percent.toFloat(), onValueChange = { onChange(it.roundToInt()) },
+            valueRange = 25f..100f, steps = 74, enabled = enabled)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            PackPresets.scales.forEach { value ->
+                TextButton(onClick = { onChange(value) }, enabled = enabled,
+                    contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text("$value") }
+            }
+        }
+    }
+}

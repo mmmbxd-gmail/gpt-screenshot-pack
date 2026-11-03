@@ -21,6 +21,8 @@ private val Context.settingsDataStore by preferencesDataStore("pack_settings")
 class SettingsStore(context: Context) {
     private val store = context.applicationContext.settingsDataStore
     private val scale = intPreferencesKey("scale")
+    private val scaleB = intPreferencesKey("scale_b")
+    private val width = intPreferencesKey("target_width")
     private val format = stringPreferencesKey("format")
     private val heic = intPreferencesKey("heic_quality")
     private val jpeg = intPreferencesKey("jpeg_quality")
@@ -35,21 +37,27 @@ class SettingsStore(context: Context) {
         val naming = value.validated()
         store.edit { it[zipBase] = naming.base; it[zipDateTime] = naming.appendDateTime }
     }
-    suspend fun saveShareOptions(value: ZipNaming, resolutionMode: ResolutionMode, outputFormat: OutputFormat) {
+    suspend fun saveShareOptions(value: ZipNaming, resolutionMode: ResolutionMode, outputFormat: OutputFormat,
+        targetWidth: Int? = null) {
         val naming = value.validated()
+        require(targetWidth == null || targetWidth > 0)
         // Reuse the existing format key; main-window saves never write this task preference.
         store.edit { it[zipBase] = naming.base; it[zipDateTime] = naming.appendDateTime
-            it[mode] = resolutionMode.name; it[format] = outputFormat.name }
+            it[mode] = resolutionMode.name; it[format] = outputFormat.name
+            if (targetWidth != null) it[width] = targetWidth }
     }
     val settings = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map {
         PackSettings((it[scale] ?: defaults.scalePercent).coerceIn(25, 100),
             OutputFormat.entries.firstOrNull { f -> f.name == it[format] } ?: defaults.format,
             (it[heic] ?: defaults.heicQuality).coerceIn(1, 100), (it[jpeg] ?: defaults.jpegQuality).coerceIn(1, 100),
-            ResolutionMode.entries.firstOrNull { m -> m.name == it[mode] } ?: defaults.resolutionMode)
+            ResolutionMode.entries.firstOrNull { m -> m.name == it[mode] } ?: defaults.resolutionMode,
+            (it[scaleB] ?: defaults.scalePercentB).coerceIn(25, 100),
+            (it[width] ?: defaults.targetWidth).takeIf { value -> value > 0 } ?: defaults.targetWidth)
     }
-    val taskOptions = settings.map { it.resolutionMode to it.format }.distinctUntilChanged()
+    val taskOptions = settings.map { Triple(it.resolutionMode, it.format, it.targetWidth) }.distinctUntilChanged()
     suspend fun save(value: PackSettings) {
         store.edit { it[scale] = value.scalePercent
+            it[scaleB] = value.scalePercentB; it[width] = value.targetWidth
             it[heic] = value.heicQuality; it[jpeg] = value.jpegQuality; it[mode] = value.resolutionMode.name }
     }
 }

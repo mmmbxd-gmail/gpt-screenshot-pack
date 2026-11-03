@@ -39,8 +39,8 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
                 val saved = store.settings.first()
                 mutable.update { it.copy(settings = saved, ready = true) }
                 // Desktop tests use the latest confirmed share task options, read-only for format.
-                store.taskOptions.collect { (mode, format) ->
-                    mutable.update { it.copy(settings = it.settings.copy(resolutionMode = mode, format = format)) }
+                store.taskOptions.collect { (mode, format, width) ->
+                    mutable.update { it.copy(settings = it.settings.copy(resolutionMode = mode, format = format, targetWidth = width)) }
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e

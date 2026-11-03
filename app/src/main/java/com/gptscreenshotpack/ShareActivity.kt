@@ -18,11 +18,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import com.gptscreenshotpack.core.OutputFormat
+import com.gptscreenshotpack.core.ResolutionMode
 
 internal fun sharedImages(intent: Intent): List<Uri> {
     if (intent.action !in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)) return emptyList()
@@ -76,34 +78,43 @@ class ShareActivity : ComponentActivity() {
 private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
     val naming = state.phase == SharePhase.NAMING
     AlertDialog(
+        modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth().padding(horizontal = 16.dp),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         onDismissRequest = model::close,
-        title = { Text(when (state.phase) {
+        title = { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(when (state.phase) {
             SharePhase.NAMING -> "本次任务设置"
             SharePhase.ERROR -> "未生成 ZIP"
             SharePhase.CANCELLING -> "正在取消"
             else -> "GPT Screenshot Pack"
-        }) },
+            }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            if (naming) Text("${state.inputCount} 张图片", style = MaterialTheme.typography.bodySmall)
+        } },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Scroll only as a fallback for small screens, large fonts, or the on-screen keyboard.
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (naming) {
-                    Text("收到 ${state.inputCount} 张图片")
                     OutlinedTextField(value = state.naming.base, onValueChange = model::editName,
                         label = { Text("文件名主体") }, singleLine = true,
+                        suffix = { if (!state.naming.base.endsWith(".zip", ignoreCase = true)) Text(".zip") },
                         isError = state.error != null, modifier = Modifier.fillMaxWidth())
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("自动附加日期时间", Modifier.weight(1f))
+                        Text("自动附加日期时间", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                         Switch(checked = state.naming.appendDateTime, onCheckedChange = model::editDateTime)
                     }
-                    Text("自动补 .zip" + if (state.naming.appendDateTime) "；日期格式 yyyyMMdd_HHmmss" else "")
-                    Text("输出格式")
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("格式", style = MaterialTheme.typography.bodyMedium)
                         listOf(OutputFormat.HEIC, OutputFormat.JPEG, OutputFormat.PNG).forEach { format ->
                             FilterChip(selected = state.format == format, onClick = { model.editFormat(format) },
                                 label = { Text(format.name) }, modifier = Modifier.weight(1f))
                         }
                     }
-                    ResolutionOptions(state.resolutionMode, state.reducedScalePercent, model::editResolutionMode)
-                    Text("保存到：${PackStorage.OUTPUT_PATH}", style = MaterialTheme.typography.bodySmall)
+                    ResolutionOptions(state.resolutionMode, state.reducedScalePercent, state.scalePercentB, model::editResolutionMode)
+                    if (state.resolutionMode == ResolutionMode.WIDTH)
+                        TargetWidthField(state.targetWidth, model::editWidth, error = state.widthError)
+                    Text("保存到 ${PackStorage.OUTPUT_PATH}", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else if (state.phase != SharePhase.ERROR) {
                     Text(when (state.phase) {
                         SharePhase.LOADING -> "正在读取保存的设置…"

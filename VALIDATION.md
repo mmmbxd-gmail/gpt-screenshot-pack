@@ -1,57 +1,73 @@
-# v0.5.0 验证记录
+# v0.6.0 验证记录
 
-日期：2026-10-05（Asia/Shanghai）。版本 **0.5.0 / versionCode 5**，在现有同一项目的 0.4.0 上小步迭代，没有重建项目。
+日期：2026-11-03（UTC）。版本 **0.6.0 / versionCode 6**，直接在现有 0.5.0 项目上迭代。保留 Activity / ViewModel / DataStore / PackProcessor / PackStorage 架构及既有编码、切片和公共目录流程。
 
-环境：Temurin JDK 17.0.20.1、Gradle 8.13、Android Platform 36 r02、Build Tools 35.0.0。
+代码提交：`c2431e94750cb9a61f186f8cb0e55a2b90042557`。发行 APK 内的 `META-INF/version-control-info.textproto` 记录了同一提交，见 `verification/apk-version-control.txt`。后续提交只整理文档、验证记录和发行附件。
+
+## 构建
+
+环境：Temurin JDK **17.0.21+9**、Gradle **8.13**、AGP **8.13.0**、Kotlin **2.2.20**、Android Platform **36 r02**、Build Tools **35.0.0**。未升级运行时依赖。
+
+使用本机环境变量提供原有签名，密钥和密码不进入源码。最终命令及结果：
 
 ```text
 ./gradlew build testDebugUnitTest lintDebug assembleDebugAndroidTest --console=plain
-BUILD SUCCESSFUL in 32s
-138 actionable tasks: 49 executed, 89 up-to-date
+BUILD SUCCESSFUL in 2m 6s
+139 actionable tasks: 25 executed, 114 up-to-date
+
+./gradlew lintRelease --console=plain
+BUILD SUCCESSFUL in 52s
+28 actionable tasks: 6 executed, 22 up-to-date
 ```
 
-## 单元测试与 Lint
+完整日志见 `verification/gradle-build.log` 和 `verification/lint-release-build.log`。Debug / Release 的 Kotlin、Java、APK 及设备测试 APK 均已编译/打包成功。
 
-Debug / Release 各运行同一组 **18 个单元测试**：PackRulesTest 10 个、ZipNamingTest 5 个、ResolutionModeTest 3 个。均 0 失败、0 错误、0 跳过，不是 36 个不同测试。
+## 单元测试和 Lint
 
-- HEIC/JPEG/PNG 示例 entry 全部为 DEFLATED；按顺序仅存图片。ZipFile 和 ZipInputStream 均能还原内容，未压缩大小和 CRC 正确，输入未改写。
-- BEST_SPEED 通过实际压缩结果与参考 raw DEFLATE 等级 1 比较，并确保 fixture 能与默认压缩级别区分；不是只断言常量值。
-- 10 MiB 生成流仍为两遍 64 KiB 有界处理、两次打开和关闭；验证解压字节长度、压缩后大小与条目类型。
-- 输入在预校验和写入之间发生 CRC 变化会拒绝；DEFLATED 可使用 data descriptor，故写入阶段显式计算实际 size/CRC 与预校验比较，不依赖旧的 STORED closeEntry 校验。取消、错误和空/非图片拒绝继续通过。
-- 原有默认 HEIC 85/JPEG 95、质量与比例快捷值、原始/降低模式、16384 阈值、双轴切片、图片/ZIP 命名、日期、非法名称和 UTF-8 长度测试全部通过。
+Debug / Release 各运行同一组 **24 个单元测试**，均为 **0 失败、0 错误、0 跳过**；不是 48 个不同用例。
 
-Android Lint：**No issues found**。保持 abortOnError / warningsAsErrors，不使用 baseline，仍只豁免原有两类工具链/依赖更新建议。verification 包含最终构建日志、lint 报告和 6 份单元测试 XML。
+| 测试组 | 每个变体的数量 | 覆盖内容 |
+| --- | ---: | --- |
+| PackRulesTest | 10 | 原有质量/比例快捷值、图片名、切片、DEFLATED / BEST_SPEED ZIP、顺序/内容/CRC、两遍 64 KiB 有界流、关闭/取消/变化拒绝 |
+| ZipNamingTest | 5 | ZIP 主体、日期、扩展名、非法字符、UTF-8 长度和重名规则 |
+| ResolutionModeTest | 9 | 原始模式忽略比例、A 的旧逻辑、B 独立生效、宽度模式横竖图/混合尺寸等比计算、四舍五入/放大/最小高度、双轴切片、非正宽度/高度溢出、极端比例计算不发生 Int 乘法溢出、新默认值及 REDUCED 旧存储值 |
 
-## 本次功能与设置兼容
+六份最终 JUnit XML 位于 `verification/`。Android Lint **Debug 和 Release 均为 No issues found**，报告已保存；继续保持 `abortOnError=true` / `warningsAsErrors=true`，不使用 baseline，保留原有两类版本更新建议豁免。
 
-- ZIP 全部改为 ZipEntry.DEFLATED / Deflater.BEST_SPEED（等级 1），压缩大小由写入器计算，不再强制等于原大小；只含图片，没有 manifest、README、JSON 或日志。
-- 分享设置窗增加 HEIC / JPEG / PNG，确认时与名称/日期/模式一起原子保存；无记录默认 HEIC，沿用已有 format 键和保存值，不清空历史偏好。
-- MainActivity 移除格式选择，长期保存方法不写 format 键，分别保留 HEIC/JPEG 品质和两组 50/75/85/90/95/100 快捷值。桌面测试读取最近确认的分享格式，主界面只显示说明。
-- 当前主界面监听最后确认的模式/格式，改变长期品质/比例不会覆盖分享格式；分享保存四个相关键，不改质量/比例或其他高级键。
-- 已有质量值保留，HEIC 缺省 85 / JPEG 95 不变；PNG 不新增有损质量设置。
-- 原始模式强制 100%，降低模式使用主界面比例；原来的模式说明、记忆、16384 px 分割、命名和清理保持。
-- 仍为独立轻量 ShareActivity，保存到公共 Output 后提示并关闭，返回原应用，不再次打开 Sharesheet。桌面入口仍进入 MainActivity。
+## 功能与兼容性
 
-## 可安装 APK
+- 分享小窗用下拉菜单替代纵向单选列表，四种选项为原始、比例 A、比例 B、指定宽度。图片数量并入标题，格式选项同行；只显示当前模式说明和按需出现的宽度框。保留必要的滚动兜底。
+- A 沿用 `scale` 和 `REDUCED`，保留既有值、25%～100% 范围、快捷值及缺省 100%；B 独立存于 `scale_b`，缺省 75%。
+- 指定宽度 `target_width` 缺省 1080 px，主界面和分享小窗可改。输出宽度精确等于设定值，高度逐张按原始比例四舍五入且至少 1，可缩小或放大；之后进入同一切片/解码/编码/ZIP 流程。
+- 分享确认时校验正整数并原子保存模式/格式/名称/日期/当前宽度；取消和校验失败不覆盖偏好，不改 A/B 或质量。宽度和模式保留在原有 SavedStateHandle，主界面同步已确认宽度。
+- 保留 HEIC 85 / JPEG 95 默认质量、HEIC/JPEG/PNG、HEIC 失败回退 PNG、名称日期、BEST_SPEED ZIP、输入顺序、公共 Output、不覆盖旧 ZIP、独立清理/取消、自动返回来源 App 和桌面诊断。
+- 主界面无效宽度只阻止宽度模式的测试，不影响原始/A/B 模式。
 
-GPT-Screenshot-Pack-0.5.0-debug.apk，已验证 v2 签名。项目无 release signing，沿用 0.1.0～0.4.0 的 debug keystore，支持覆盖安装；密钥不上传。
+## APK 与签名
 
-证书 SHA-256：e6026d6cf3d969afe91ca9a266d879d379ad8299dda863190a2c5c3fa082d354。
+发行文件：`GPT-Screenshot-Pack-0.6.0.apk`，来自 **Release** 变体，已核对无 `application-debuggable` 标记。沿用原有开发签名证书，v2 签名验证通过；与仓库中实际 0.5.0 APK 的证书逐项比较一致，支持相同包名覆盖安装。
 
-aapt：com.gptscreenshotpack、versionCode=5、versionName=0.5.0、minSdk=28、targetSdk=36。无 INTERNET / MANAGE_EXTERNAL_STORAGE，WRITE_EXTERNAL_STORAGE 仅 maxSdkVersion=28；启动和分享的独立路由不变。
+证书 SHA-256：`e6026d6cf3d969afe91ca9a266d879d379ad8299dda863190a2c5c3fa082d354`。
+
+密钥从用户 Google Drive 的原始签名备份恢复，仅用于本机构建；未加入仓库、源码包或发行附件。可选签名通过 `PACK_KEYSTORE` / `PACK_STORE_PASSWORD` / `PACK_KEY_ALIAS` / `PACK_KEY_PASSWORD` 配置，未设置时保留 unsigned Release。
+
+已验证：包名 `com.gptscreenshotpack`、versionCode=6、versionName=0.6.0、minSdk=28、targetSdk=36；无 INTERNET / MANAGE_EXTERNAL_STORAGE，WRITE_EXTERNAL_STORAGE 仅 maxSdkVersion=28。启动和分享路由保持，APK 的 16 KiB ZIP 对齐检查通过。证据见 `verification/apk-*.txt`。
+
+最终 ZIP 目录继续为 `Download/GPT Screenshot Pack/Output/`；中间文件位于 `Temp/<UUID>/`。输出 ZIP 仅包含图片。
 
 ## 设备测试边界
 
-当前环境没有 Android 设备或可用模拟器，**6 个设备测试已编译但未执行**，不能把编译当作实机通过。
+**8 项设备测试已编译，但未执行。** 当前没有实体 Android 手机；环境没有 `/dev/kvm`，API 35 软件模拟器长时间未完成系统初始化，安装尝试返回 `Can't find service: package`，窗口查询返回 `Can't find service: window`，未能运行应用测试。
 
-- 原有 HEIC 实际往返、PNG/50 张/长图/失败、公共文件/清理/重名与入口测试的 ZIP 断言更新为 DEFLATED。
-- 分享流程测试：默认 HEIC；主界面保存携带 JPEG 不改变任务格式；选择 PNG 后旋转保留；下次记忆 PNG/模式/名称/日期；降低输出 8×12、原始输出 16×24；改选 JPEG 使用已保存质量 90 并生成 jpg；下次记住 JPEG，取消修改 HEIC 不覆盖；全程保存后关闭，不启动 MainActivity；两种质量 75/90 和比例仍保留。
-- 测试恢复原偏好，仅删除自己的测试输出，不清空用户的 Output。
+新增设备测试已覆盖以下待运行场景：
 
-真实分享返回、小窗/键盘外观、Android 9 授权、文件选择器可见性、厂商 HEIC 编码、真实截图/OCR，以及 ChatGPT/其他接收方的 ZIP 接受行为仍需实机确认。本版完成 ZIP 标准读取验证，没有声称某个第三方上传器已通过。连接设备后运行 ./gradlew connectedDebugAndroidTest。
+- 分享下拉菜单四种选项、原始/宽度两种布局的内容可见性和纵向滚动范围为零断言，及真实截图采集。
+- B 比例实际输出 12×18、宽度模式放大输出 20×30、无效宽度不提交、旋转保留、下次记忆、取消保留旧值、质量/A/B 不变、已打开主界面同步。
 
-## 输出与完整发行
+原有 HEIC 往返、PNG/JPEG 实际输出、50 张/长图/切片、公共输出/清理/重名、分享返回与错误显示用例均保留。连接手机后运行 `./gradlew connectedDebugAndroidTest`。
 
-最终目录：Download/GPT Screenshot Pack/Output/；中间文件：Temp/<UUID>/。Output 永不自动删除，Temp 活跃任务保护、输出清理、文件命名不变。AndroidX HeifWriter、CQ Auto、Grid Auto、MediaCodec 诊断实现未改，稳定公开 API 差异继续见 README。
+实际手机上的一屏布局、键盘/大字体行为、Android 9 存储授权、厂商 HEIC、相册分享、真实截图/OCR 和第三方上传兼容性仍需目标手机验收。此次没有把编译成功记作设备测试通过，也没有生成未经验证的界面截图。
 
-提交源码、README/规格/验证记录与已签名 APK；创建 v0.5.0 tag 和 GitHub Release。附件包含 APK、干净源码 ZIP 和 SHA-256。沿用现有工作流校验并上传同一批产物，不重新签名、不开新的仓库。
+## 发行内容
+
+仓库内更新源码、README、规格、变更记录及验证文件；v0.6.0 发行附件包含不可调试且沿用原签名的 APK、干净源码 ZIP 和 SHA-256 校验文件。源码 ZIP 排除 `.git`、downloads、SDK、构建输出、本机配置和签名文件。

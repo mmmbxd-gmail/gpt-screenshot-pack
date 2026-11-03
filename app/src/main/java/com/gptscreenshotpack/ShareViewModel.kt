@@ -29,6 +29,7 @@ data class ShareUiState(
     val result: PackResult? = null, val canRetry: Boolean = false,
     val resolutionMode: ResolutionMode = ResolutionMode.ORIGINAL, val reducedScalePercent: Int = 100,
     val format: OutputFormat = OutputFormat.HEIC,
+    val scalePercentB: Int = 75, val targetWidth: String = "1080", val widthError: String? = null,
 )
 
 /** Separate request lifetime: launching from Sharesheet never constructs the main screen/model. */
@@ -68,7 +69,9 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
                     OutputFormat.entries.firstOrNull { it.name == name }
                 } ?: settings.format
                 mutable.update { it.copy(phase = SharePhase.NAMING, naming = naming,
-                    resolutionMode = mode, reducedScalePercent = settings.scalePercent, format = format) }
+                    resolutionMode = mode, reducedScalePercent = settings.scalePercent, format = format,
+                    scalePercentB = settings.scalePercentB,
+                    targetWidth = savedState.get<String>("targetWidth") ?: settings.targetWidth.toString()) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { fail("无法读取设置：${e.message}") }
         }
@@ -87,7 +90,12 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
     fun editResolutionMode(mode: ResolutionMode) {
         if (mutable.value.phase != SharePhase.NAMING) return
         savedState["resolutionMode"] = mode.name
-        mutable.update { it.copy(resolutionMode = mode) }
+        mutable.update { it.copy(resolutionMode = mode, widthError = null) }
+    }
+    fun editWidth(value: String) {
+        if (mutable.value.phase != SharePhase.NAMING) return
+        savedState["targetWidth"] = value
+        mutable.update { it.copy(targetWidth = value, widthError = null) }
     }
     fun editFormat(format: OutputFormat) {
         if (mutable.value.phase != SharePhase.NAMING) return
@@ -101,12 +109,18 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
         catch (e: IllegalArgumentException) { mutable.update { it.copy(error = e.message) }; return }
         val mode = mutable.value.resolutionMode
         val format = mutable.value.format
+        val width = if (mode == ResolutionMode.WIDTH) mutable.value.targetWidth.toIntOrNull()?.takeIf { it > 0 } else null
+        if (mode == ResolutionMode.WIDTH && width == null) {
+            mutable.update { it.copy(widthError = "请输入有效的正整数宽度（px）") }
+            return
+        }
         fileName = naming.fileName() // Device-local time at confirmation, fixed for this request.
         mutable.update { it.copy(phase = SharePhase.PREPARING, naming = naming, error = null) }
         job = viewModelScope.launch {
             try {
-                settings = store.settings.first().copy(resolutionMode = mode, format = format)
-                store.saveShareOptions(naming, mode, format)
+                val latest = store.settings.first()
+                settings = latest.copy(resolutionMode = mode, format = format, targetWidth = width ?: latest.targetWidth)
+                store.saveShareOptions(naming, mode, format, width)
                 if (PackStorage.hasPermission(getApplication())) process()
                 else mutable.update { it.copy(phase = SharePhase.PERMISSION, askStoragePermission = true) }
             } catch (e: CancellationException) { throw e }

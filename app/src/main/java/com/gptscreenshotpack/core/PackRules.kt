@@ -9,9 +9,11 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipOutputStream
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 enum class OutputFormat(val extension: String) { HEIC("heic"), PNG("png"), JPEG("jpg") }
-enum class ResolutionMode { ORIGINAL, REDUCED }
+// Keep REDUCED's persisted name for the existing scale A preference.
+enum class ResolutionMode { ORIGINAL, REDUCED, SCALE_B, WIDTH }
 
 data class PackSettings(
     val scalePercent: Int = 100,
@@ -19,15 +21,29 @@ data class PackSettings(
     val heicQuality: Int = 85,
     val jpegQuality: Int = 95,
     val resolutionMode: ResolutionMode = ResolutionMode.ORIGINAL,
+    val scalePercentB: Int = 75,
+    val targetWidth: Int = 1080,
 ) {
     init {
         require(scalePercent in 25..100)
+        require(scalePercentB in 25..100)
+        require(targetWidth > 0)
         require(heicQuality in 1..100 && jpegQuality in 1..100)
     }
     val quality: Int get() = if (format == OutputFormat.JPEG) jpegQuality else heicQuality
-    val effectiveScalePercent: Int get() = if (resolutionMode == ResolutionMode.ORIGINAL) 100 else scalePercent
-    fun targetDimensions(input: Dimensions): Dimensions =
-        if (resolutionMode == ResolutionMode.ORIGINAL) input else input.scaled(scalePercent)
+    // Width mode has a different effective percentage for each input image.
+    val effectiveScalePercent: Int? get() = when (resolutionMode) {
+        ResolutionMode.ORIGINAL -> 100
+        ResolutionMode.REDUCED -> scalePercent
+        ResolutionMode.SCALE_B -> scalePercentB
+        ResolutionMode.WIDTH -> null
+    }
+    fun targetDimensions(input: Dimensions): Dimensions = when (resolutionMode) {
+        ResolutionMode.ORIGINAL -> input
+        ResolutionMode.REDUCED -> input.scaled(scalePercent)
+        ResolutionMode.SCALE_B -> input.scaled(scalePercentB)
+        ResolutionMode.WIDTH -> input.withWidth(targetWidth)
+    }
 }
 
 object PackPresets {
@@ -37,10 +53,16 @@ object PackPresets {
 
 data class Dimensions(val width: Int, val height: Int) {
     init { require(width > 0 && height > 0) }
+    fun withWidth(targetWidth: Int): Dimensions {
+        require(targetWidth > 0) { "宽度须为正整数（px）" }
+        val targetHeight = (height * (targetWidth.toDouble() / width)).roundToLong().coerceAtLeast(1)
+        require(targetHeight <= Int.MAX_VALUE) { "按指定宽度计算的高度过大，请减小宽度" }
+        return Dimensions(targetWidth, targetHeight.toInt())
+    }
     fun scaled(percent: Int): Dimensions {
         require(percent in 25..100)
-        return Dimensions((width * percent / 100.0).roundToInt().coerceAtLeast(1),
-            (height * percent / 100.0).roundToInt().coerceAtLeast(1))
+        return Dimensions((width.toLong() * percent / 100.0).roundToInt().coerceAtLeast(1),
+            (height.toLong() * percent / 100.0).roundToInt().coerceAtLeast(1))
     }
 }
 
