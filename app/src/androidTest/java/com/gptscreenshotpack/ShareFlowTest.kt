@@ -204,4 +204,61 @@ class ShareFlowTest {
             awaitClosed(scenario)
         }
     }
+
+    @Test fun secondScaleAndInlineWidthValidateRotatePersistAndProduceProportionalImages() = runBlocking {
+        store.save(PackSettings(scalePercent = 50, heicQuality = 85, jpegQuality = 90, scalePercentB = 75, targetWidth = 12))
+        store.saveShareOptions(ZipNaming("width_${UUID.randomUUID()}", false), ResolutionMode.ORIGINAL, OutputFormat.PNG)
+        val source = image("width.png")
+        ActivityScenario.launch<ShareActivity>(single(source)).use { scenario ->
+            val model = model(scenario)
+            assertEquals(75, awaitPhase(model, SharePhase.NAMING).scalePercentB)
+            scenario.onActivity { model.editResolutionMode(ResolutionMode.SCALE_B); model.confirm() }
+            val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
+            assertDimensions(checkNotNull(result.zip).also(outputs::add), 12, 18)
+            awaitClosed(scenario)
+        }
+        ActivityScenario.launch<ShareActivity>(single(source)).use { scenario ->
+            val model = model(scenario)
+            assertEquals(ResolutionMode.SCALE_B, awaitPhase(model, SharePhase.NAMING).resolutionMode)
+            for (invalid in listOf("", "0", "-1", "1.5", "2147483648")) {
+                scenario.onActivity { model.editResolutionMode(ResolutionMode.WIDTH); model.editWidth(invalid); model.confirm() }
+                assertEquals(SharePhase.NAMING, model.state.value.phase)
+                assertNotNull(model.state.value.widthError)
+                assertEquals(12, store.settings.first().targetWidth)
+                assertEquals(ResolutionMode.SCALE_B, store.settings.first().resolutionMode)
+            }
+            scenario.onActivity { model.editWidth("20") }
+            scenario.recreate()
+            assertSame(model, model(scenario))
+            assertEquals("20", model.state.value.targetWidth)
+            assertEquals(ResolutionMode.WIDTH, model.state.value.resolutionMode)
+            scenario.onActivity { model.confirm() }
+            val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
+            assertDimensions(checkNotNull(result.zip).also(outputs::add), 20, 30)
+            assertEquals(20, store.settings.first().targetWidth)
+            assertEquals(50, store.settings.first().scalePercent)
+            assertEquals(75, store.settings.first().scalePercentB)
+            assertEquals(85, store.settings.first().heicQuality)
+            assertEquals(90, store.settings.first().jpegQuality)
+            awaitClosed(scenario)
+        }
+        ActivityScenario.launch<ShareActivity>(single(source)).use { scenario ->
+            val model = model(scenario)
+            val state = awaitPhase(model, SharePhase.NAMING)
+            assertEquals(ResolutionMode.WIDTH, state.resolutionMode)
+            assertEquals("20", state.targetWidth)
+            scenario.onActivity { model.editWidth("10"); model.editFormat(OutputFormat.JPEG); model.close() }
+            awaitClosed(scenario)
+            assertEquals(20, store.settings.first().targetWidth)
+            assertEquals(OutputFormat.PNG, store.settings.first().format)
+        }
+        // A main window already open before sharing must observe the confirmed width.
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            lateinit var mainModel: PackViewModel
+            scenario.onActivity { mainModel = ViewModelProvider(it)[PackViewModel::class.java] }
+            withTimeout(10_000) { mainModel.state.first { it.ready && it.settings.targetWidth == 20 } }
+            store.saveShareOptions(store.zipNaming.first(), ResolutionMode.WIDTH, OutputFormat.PNG, 10)
+            withTimeout(10_000) { mainModel.state.first { it.settings.targetWidth == 10 } }
+        }
+    }
 }

@@ -10,9 +10,25 @@ android {
         applicationId = "com.gptscreenshotpack"
         minSdk = 28
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    // Optional local signing; never store the keystore or passwords in the repository.
+    val signingPath = providers.environmentVariable("PACK_KEYSTORE").orNull
+    if (signingPath != null) {
+        signingConfigs {
+            getByName("debug") {
+                storeFile = file(signingPath)
+                storePassword = providers.environmentVariable("PACK_STORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("PACK_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("PACK_KEY_PASSWORD").get()
+            }
+            create("release") {
+                initWith(getByName("debug"))
+            }
+        }
+        buildTypes.getByName("release").signingConfig = signingConfigs.getByName("release")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -35,4 +51,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.09.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
