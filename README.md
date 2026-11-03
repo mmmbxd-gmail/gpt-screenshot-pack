@@ -11,7 +11,7 @@ Android 本地截图预处理工具，Kotlin + Compose，Android 9（API 28）�
 ## 使用
 
 - 相册按顺序选择图片 → Android 分享菜单 → GPT Screenshot Pack → **设置小窗 → 处理图片 → 生成 ZIP → 保存 → 自动关闭并返回来源 App**。继续使用独立的透明 `ShareActivity`，不进入正常主界面，也不自动打开系统 Sharesheet。
-- 设置小窗包含 ZIP 名称主体、**自动附加日期时间**、**HEIC / JPEG / PNG 输出格式**及四种分辨率模式。图片数量放入标题，格式选项合并为一行；分辨率用紧凑下拉选择器，只显示当前模式的简短说明，指定宽度输入框按需出现。一般竖屏不需要滚动；小屏、大字体或键盘弹出时仍允许滚动，避免内容无法访问。自动补 `.zip`；输入已有 `.zip`（不区分大小写）会去除再补，避免重复扩展名。日期开关默认开启，以手机本地时间在确认时生成 `yyyyMMdd_HHmmss`，例如 `聊天记录_20261005_132530.zip`。确认后通过现有 DataStore 一次保存主体、日期开关、格式和模式，宽度模式同时保存已确认宽度，下次分享继续使用；取消、输入校验失败均不覆盖上次确认的设置。
+- 设置小窗包含 ZIP 名称主体、**自动附加日期时间**、**HEIC / JPEG / PNG 输出格式**及四种分辨率模式。图片数量放入标题，格式选项合并为一行；分辨率用紧凑下拉选择器，只显示当前模式的简短说明，指定宽度输入框按需出现。按一般手机竖屏的一屏布局设计；小屏、大字体或键盘弹出时仍允许滚动，避免内容无法访问。实际设备布局验证状态见 VALIDATION.md。自动补 `.zip`；输入已有 `.zip`（不区分大小写）会去除再补，避免重复扩展名。日期开关默认开启，以手机本地时间在确认时生成 `yyyyMMdd_HHmmss`，例如 `聊天记录_20261005_132530.zip`。确认后通过现有 DataStore 一次保存主体、日期开关、格式和模式，宽度模式同时保存已确认宽度，下次分享继续使用；取消、输入校验失败均不覆盖上次确认的设置。
 - 首次名称主体为 `GPT_Screenshots`。空白、路径分隔符、控制字符及常见非法文件名字符会提示修改；主体最多 200 个 UTF-8 字节，保留时间和重名后缀空间。同名 ZIP 追加 `_copy2` 等，不覆盖旧文件。
 - **原始分辨率**：保留更多图像细节，但 GPT 处理时可能产生更多图像分割。直接使用输入宽高，不应用保存的缩放比例；首次没有模式偏好时使用这一模式。
 - **按缩放比例 A**：沿用旧版“降低分辨率”的 `REDUCED` 模式值和 `scale` 偏好，已有数值不变，未设置时仍为 100%。范围仍为 25%～100%，保留 33 / 50 / 60 / 67 / 75 / 100 快捷值；选择 100% 时明确提示尺寸与原图相同。
@@ -82,7 +82,7 @@ Download/GPT Screenshot Pack/
 需要 JDK 17+、Android SDK Platform 36、Build Tools 35.0.0。依赖固定：AGP 8.13.0、Gradle 8.13、Kotlin 2.2.20、Compose BOM 2025.09.01、HeifWriter 1.1.0。设置 `ANDROID_HOME` 或本机 `local.properties` 的 sdk.dir。
 
 ```sh
-./gradlew build testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+./gradlew build testDebugUnitTest lintDebug lintRelease assembleDebug assembleDebugAndroidTest
 ```
 
 连接 Android 16 实机（启用 USB 调试）后：
