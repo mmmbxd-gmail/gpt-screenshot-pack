@@ -26,7 +26,7 @@ import java.io.File
 class ShareLayoutTest {
     @get:Rule val compose = createEmptyComposeRule()
 
-    @Test fun dropdownAndWidthModeFitPortraitWithoutScrolling() = runBlocking {
+    @Test fun dropdownAndWidthModeFitPortraitWithoutScrolling() = runBlocking<Unit> {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val store = SettingsStore(context)
