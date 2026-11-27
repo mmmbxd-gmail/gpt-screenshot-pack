@@ -183,7 +183,7 @@ class PackDeviceTest {
         context.contentResolver.openInputStream(output.uri)!!.use { assertTrue(it.read() >= 0) }
     }
 
-    @Test fun pdfUsesScaledJpegPagesInInputOrder() = runBlocking {
+    @Test fun pdfUsesScaledJpegPagesInInputOrder() = runBlocking<Unit> {
         val first = colorBands("first.png", 480, 320, listOf(Color.RED, Color.TRANSPARENT))
         val long = colorBands("long.png", 96, 28_000, listOf(Color.RED, Color.GREEN, Color.BLUE))
         val last = colorBands("last.png", 320, 480, listOf(Color.BLUE))

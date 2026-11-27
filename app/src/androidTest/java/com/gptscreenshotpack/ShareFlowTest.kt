@@ -238,7 +238,7 @@ class ShareFlowTest {
         }
     }
 
-    @Test fun secondScaleAndInlineWidthValidateRotatePersistAndProduceProportionalImages() = runBlocking {
+    @Test fun secondScaleAndInlineWidthValidateRotatePersistAndProduceProportionalImages() = runBlocking<Unit> {
         store.save(PackSettings(scalePercent = 50, heicQuality = 85, jpegQuality = 90, scalePercentB = 75, targetWidth = 12))
         store.saveShareOptions(OutputNaming("width_${UUID.randomUUID()}", false), ResolutionMode.ORIGINAL, OutputFormat.PNG)
         val source = image("width.png")
