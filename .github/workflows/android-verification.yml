@@ -70,7 +70,7 @@ jobs:
             "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
           fi
           pack_emulator_pid=$!
-          trap 'cat /tmp/pack-qa/emulator.log; adb emu kill || true' EXIT
+          trap 'grep -ivE "adb.pubkey|adb public key" /tmp/pack-qa/emulator.log | tail -35; adb emu kill || true' EXIT
           for pack_attempt in {1..40}; do
             if adb devices | grep -q '^emulator-'; then break; fi
             kill -0 "$pack_emulator_pid"
@@ -89,12 +89,16 @@ jobs:
           adb shell settings put global animator_duration_scale 0
           adb install -r downloads/GPT-Screenshot-Pack-0.6.1.apk
           adb install -r downloads/GPT-Screenshot-Pack-0.7.0.apk
-          adb shell dumpsys package com.gptscreenshotpack | rg 'versionCode=8|versionName=0.7.0|pkgFlags='
+          adb shell dumpsys package com.gptscreenshotpack | grep -E 'versionCode=8|versionName=0.7.0|pkgFlags='
           adb uninstall com.gptscreenshotpack
           adb install -r app/build/outputs/apk/debug/app-debug.apk
           adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           adb shell am instrument -w -r com.gptscreenshotpack.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/pack-qa/instrumentation.txt
-          adb pull /sdcard/Android/data/com.gptscreenshotpack/files/verification/pdf-output.pdf /tmp/pack-qa/android-export.pdf
+          pack_pdf_path=/sdcard/Android/data/com.gptscreenshotpack/files/verification/pdf-output.pdf
+          if ! adb pull "$pack_pdf_path" /tmp/pack-qa/android-export.pdf; then
+            adb exec-out run-as com.gptscreenshotpack cat "$pack_pdf_path" > /tmp/pack-qa/android-export.pdf
+          fi
+          stat -c 'Generated PDF: %s bytes' /tmp/pack-qa/android-export.pdf
           pack_downloads=content://media/external_primary/downloads
           pack_title=GPT-Screenshot-Pack-verify.pdf
           adb shell "content insert --uri $pack_downloads --bind _display_name:s:$pack_title --bind mime_type:s:application/pdf --bind relative_path:s:Download/"
@@ -104,13 +108,20 @@ jobs:
           adb shell -T "content write --uri $pack_downloads/$pack_id" < /tmp/pack-qa/android-export.pdf
           adb shell am start -W -a android.intent.action.VIEW -d "$pack_downloads/$pack_id" -t application/pdf --grant-read-uri-permission -p com.google.android.apps.docs
           sleep 4
-          adb shell dumpsys activity activities | rg 'topResumedActivity.*PdfViewerActivity'
+          adb shell dumpsys activity activities | grep -E '(topResumedActivity|mResumedActivity).*PdfViewerActivity'
           adb exec-out screencap -p > /tmp/pack-qa/google-drive-reader.png
+          adb exec-out screencap > /tmp/pack-drive-preview.raw
+          python3 - <<'PY'
+          from pathlib import Path
+          from struct import unpack_from
+
+          raw = Path("/tmp/pack-drive-preview.raw").read_bytes()
+          width, height, pixel_format = unpack_from("<III", raw)
+          offset = len(raw) - width * height * 4
+          assert pixel_format in (1, 2) and offset in (12, 16), (width, height, pixel_format, offset)
+          image = raw[offset:]
+          red = sum(r >= 230 and g < 30 and b < 30 for r, g, b in zip(image[::4], image[1::4], image[2::4]))
+          assert red > 5000, red
+          print(f"Google Drive PDF viewer rendered the first page ({red} red pixels).")
+          PY
           grep -q '^OK (13 tests)' /tmp/pack-qa/instrumentation.txt
-      - name: Collect test evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: android-verification-0.7.0
-          path: /tmp/pack-qa/
-          retention-days: 14
