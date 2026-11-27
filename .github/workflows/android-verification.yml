@@ -53,15 +53,25 @@ jobs:
         run: |
           mkdir -p /tmp/pack-qa
           pack_emulator="$ANDROID_HOME/emulator/emulator"
-          pack_options=(-avd pack35 -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on)
+          pack_options=(-avd pack35 -no-window -no-snapshot -no-audio -no-boot-anim -no-metrics -gpu swiftshader_indirect -accel on)
+          pack_launch=()
           adb start-server
-          if [[ -r /dev/kvm && -w /dev/kvm ]]; then
-            "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
-          else
-            sudo -n -u "$(id -un)" -g "$(stat -c %G /dev/kvm)" --preserve-env=ANDROID_HOME,ANDROID_SDK_ROOT \
-              "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
+          ls -l /dev/kvm
+          df -h "$RUNNER_TEMP"
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            pack_launch=(sudo -n -u "$(id -un)" -g "$(stat -c %G /dev/kvm)"
+              env "ANDROID_HOME=$ANDROID_HOME" "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT")
           fi
-          trap 'adb emu kill || true' EXIT
+          "${pack_launch[@]}" "$pack_emulator" -accel-check
+          "${pack_launch[@]}" "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
+          pack_emulator_pid=$!
+          trap 'cat /tmp/pack-qa/emulator.log; adb emu kill || true' EXIT
+          for pack_attempt in {1..40}; do
+            if adb devices | grep -q '^emulator-'; then break; fi
+            kill -0 "$pack_emulator_pid"
+            sleep 1
+          done
+          adb devices | grep '^emulator-'
           ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --console=plain
           timeout 180 adb wait-for-device
           timeout 180 bash -c 'until [[ $(adb shell getprop sys.boot_completed | tr -d "\r") = 1 ]]; do sleep 3; done'
