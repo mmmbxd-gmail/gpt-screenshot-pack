@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.gptscreenshotpack.core.OutputContainer
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.PackPresets
 import com.gptscreenshotpack.core.ResolutionMode
@@ -47,15 +48,16 @@ class MainActivity : ComponentActivity() {
 
     private fun share(output: PackOutput) {
         try {
-            contentResolver.openFileDescriptor(output.uri, "r")?.use { } ?: error("ZIP 已被删除")
+            contentResolver.openFileDescriptor(output.uri, "r")?.use { } ?: error("文件已被删除")
             val uri = output.uri
+            val label = "截图 ${output.container}"
             val send = Intent(Intent.ACTION_SEND).apply {
-                type = "application/zip"
+                type = output.container.mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
-                clipData = ClipData.newRawUri("截图 ZIP", uri)
+                clipData = ClipData.newRawUri(label, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(send, "分享截图 ZIP"))
+            startActivity(Intent.createChooser(send, "分享$label"))
         } catch (e: Exception) { model.message("无法分享：${e.message}") }
     }
 }
@@ -103,24 +105,19 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
                 }, enabled = enabled, error = if (widthValue == null) "请输入有效的正整数宽度（px）" else null)
                 Text("各参数仅用于对应模式；按宽度缩放时高度保持比例。分享小窗也可修改宽度。",
                     style = MaterialTheme.typography.bodySmall)
-                listOf(OutputFormat.HEIC, OutputFormat.JPEG).forEach { format ->
-                    val currentQuality = if (format == OutputFormat.HEIC) settings.heicQuality else settings.jpegQuality
-                    Text("$format 质量：$currentQuality")
-                    fun quality(value: Int) {
-                        model.setSettings(if (format == OutputFormat.HEIC) settings.copy(heicQuality = value) else settings.copy(jpegQuality = value))
-                    }
-                    Slider(value = currentQuality.toFloat(), onValueChange = { quality(it.roundToInt()) },
-                        valueRange = 1f..100f, steps = 98, enabled = enabled)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        PackPresets.qualities.forEach { q ->
-                            TextButton(onClick = { quality(q) }, enabled = enabled,
-                                contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text("$q") }
-                        }
-                    }
+                QualityControl("HEIC 质量", settings.heicQuality, enabled) {
+                    model.setSettings(settings.copy(heicQuality = it))
+                }
+                QualityControl("JPEG 质量", settings.jpegQuality, enabled) {
+                    model.setSettings(settings.copy(jpegQuality = it))
+                }
+                QualityControl("PDF 图片质量", settings.pdfQuality, enabled) {
+                    model.setSettings(settings.copy(pdfQuality = it))
                 }
                 Text("编码器：自动 · CQ：自动 · Grid：自动")
-                Text("最终尺寸超过 16384 px 自动均匀切片\n文件名前缀：resized_\nHEIC 编码失败时回退 PNG", style = MaterialTheme.typography.bodySmall)
-                Text("输出格式在分享小窗选择；桌面测试使用最近选择：${settings.format}", style = MaterialTheme.typography.bodySmall)
+                Text("ZIP 图片超过 16384 px 自动均匀切片\n文件名前缀：resized_\nHEIC 编码失败时回退 PNG", style = MaterialTheme.typography.bodySmall)
+                val testOutput = if (settings.container == OutputContainer.PDF) "PDF" else "ZIP · ${settings.format}"
+                Text("输出方式在分享小窗选择。测试使用最近选择：$testOutput", style = MaterialTheme.typography.bodySmall)
                 val testEnabled = enabled && (settings.resolutionMode != ResolutionMode.WIDTH || widthValue != null)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { picker.launch(arrayOf("image/*")) }, enabled = testEnabled,
@@ -135,32 +132,36 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
                     HorizontalDivider()
                     Text("成功：${result.successCount} · 失败：${result.errors.size} · 输入：${result.inputCount} · 输出：${result.outputCount}")
                     Text("原始已知大小：${bytes(result.inputBytes)}" + if (result.unknownInputSizes > 0) "（${result.unknownInputSizes} 张大小未知）" else "")
-                    Text("输出图片：${bytes(result.outputBytes)} · ZIP：${bytes(result.zip?.size ?: 0)}")
-                    Text("耗时：${result.elapsedMs} ms · ${result.settings.resolutionSummary()} · 格式：${result.settings.format}" +
-                        if (result.settings.format == OutputFormat.PNG) "" else " · 质量：${result.settings.quality}")
-                    Text("实际 codec / 硬件加速 / bitrate mode：Unknown", style = MaterialTheme.typography.bodySmall)
+                    val pdf = result.settings.container == OutputContainer.PDF
+                    val container = result.settings.container
+                    val format = if (pdf) OutputFormat.JPEG else result.settings.format
+                    Text("输出图片：${bytes(result.outputBytes)} · $container：${bytes(result.output?.size ?: 0)}")
+                    Text("耗时：${result.elapsedMs} ms · ${result.settings.resolutionSummary()} · 格式：$format" +
+                        if (format == OutputFormat.PNG) "" else " · 质量：${result.settings.quality}")
+                    if (format == OutputFormat.HEIC)
+                        Text("实际 codec / 硬件加速 / bitrate mode：Unknown", style = MaterialTheme.typography.bodySmall)
                     result.notes.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                     result.errors.forEach { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                    result.zip?.let { output ->
+                    result.output?.let { output ->
                         Text("已保存：${output.directory}${output.name}", style = MaterialTheme.typography.bodySmall)
-                        Button(onClick = { share(output) }, enabled = !state.busy) { Text("分享 ZIP") }
+                        Button(onClick = { share(output) }, enabled = !state.busy) { Text("分享 $container") }
                     }
-                    if (result.zip == null) Text("所有输入均失败，未生成 ZIP")
+                    if (result.output == null) Text("所有输入均失败，未生成 $container")
                 }
                 HorizontalDivider()
                 OutlinedButton(onClick = { diagnosticPage = true; model.diagnostics() }) { Text("编码器信息") }
                 OutlinedButton(onClick = { confirmCleanOutput = false }, enabled = enabled) { Text("清理临时文件") }
                 OutlinedButton(onClick = { confirmCleanOutput = true }, enabled = enabled) { Text("清理生成文件") }
-                Text("公共输出目录：${PackStorage.OUTPUT_PATH}\n在 ChatGPT 上传文件时，从“下载”进入 GPT Screenshot Pack → Output 选择 ZIP。\nTemp 过期 24 小时可在启动时清理；Output 永不自动删除。ZIP 仅存放图片，使用 DEFLATED 最快压缩。\n全部处理在本地完成，不申请网络权限。\n${BuildConfig.VERSION_NAME} · Android 9+", style = MaterialTheme.typography.bodySmall)
+                Text("公共输出目录：${PackStorage.OUTPUT_PATH}\n在 ChatGPT 上传文件时，从“下载”进入 GPT Screenshot Pack → Output 选择 ZIP 或 PDF。\nTemp 过期 24 小时可在启动时清理，Output 永不自动删除。\n全部处理在本地完成，不申请网络权限。\n${BuildConfig.VERSION_NAME} · Android 9+", style = MaterialTheme.typography.bodySmall)
             }
         }
     }
     if (confirmCleanOutput != null) {
         val output = confirmCleanOutput == true
         AlertDialog(onDismissRequest = { confirmCleanOutput = null },
-            title = { Text(if (output) "清理生成的 ZIP？" else "清理临时文件？") },
-            text = { Text(if (output) "删除本应用在公共 Output 中生成的 ZIP，已有分享链接将失效。原始图片不受影响。"
-                else "清理本应用公共 Temp 中的中间文件。Output 中的 ZIP 和原始图片保留。") },
+            title = { Text(if (output) "清理生成文件？" else "清理临时文件？") },
+            text = { Text(if (output) "删除本应用在公共 Output 中生成的 ZIP 和 PDF，已有分享链接将失效。原始图片保留。"
+                else "清理本应用公共 Temp 中的中间文件。Output 中的文件和原始图片保留。") },
             confirmButton = { TextButton(onClick = {
                 confirmCleanOutput = null
                 if (output) model.cleanOutput() else model.cleanTemp()
@@ -170,6 +171,19 @@ private fun PackScreen(state: PackUiState, model: PackViewModel, share: (PackOut
 }
 
 private fun bytes(value: Long): String = String.format(Locale.getDefault(), "%.2f MiB", value / 1048576.0)
+
+@Composable
+private fun QualityControl(label: String, value: Int, enabled: Boolean, onChange: (Int) -> Unit) {
+    Text("$label：$value")
+    Slider(value = value.toFloat(), onValueChange = { onChange(it.roundToInt()) },
+        valueRange = 1f..100f, steps = 98, enabled = enabled)
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        PackPresets.qualities.forEach { quality ->
+            TextButton(onClick = { onChange(quality) }, enabled = enabled,
+                contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text("$quality") }
+        }
+    }
+}
 
 @Composable
 private fun ScaleControl(label: String, percent: Int, enabled: Boolean, onChange: (Int) -> Unit) {

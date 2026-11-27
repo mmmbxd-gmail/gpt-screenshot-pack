@@ -6,9 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.gptscreenshotpack.core.PackSettings
+import com.gptscreenshotpack.core.OutputContainer
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.ResolutionMode
-import com.gptscreenshotpack.core.ZipNaming
+import com.gptscreenshotpack.core.OutputNaming
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,11 +25,12 @@ enum class SharePhase { LOADING, NAMING, PREPARING, PERMISSION, PROCESSING, CANC
 
 data class ShareUiState(
     val phase: SharePhase = SharePhase.LOADING,
-    val naming: ZipNaming = ZipNaming(), val inputCount: Int = 0, val done: Int = 0,
+    val naming: OutputNaming = OutputNaming(), val inputCount: Int = 0, val done: Int = 0,
     val error: String? = null, val askStoragePermission: Boolean = false,
     val result: PackResult? = null, val canRetry: Boolean = false,
     val resolutionMode: ResolutionMode = ResolutionMode.ORIGINAL, val reducedScalePercent: Int = 100,
     val format: OutputFormat = OutputFormat.HEIC,
+    val container: OutputContainer = OutputContainer.ZIP, val pdfQuality: Int = 85,
     val scalePercentB: Int = 75, val targetWidth: String = "1080", val widthError: String? = null,
 )
 
@@ -49,15 +51,15 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
         inputs = uris.toList()
         mutable.update { it.copy(inputCount = inputs.size) }
         if (savedState.get<Boolean>("submitted") == true) {
-            fail("处理流程已被系统中断，请关闭后重新分享；已保存的 ZIP 仍保留在 Output")
+            fail("处理流程已被系统中断，请关闭后重新分享，已保存的文件保留在 Output")
             return // Never reprocess a request after process death and create a duplicate archive.
         }
         if (inputs.isEmpty()) { fail("没有收到可读取的图片，请关闭后重新分享"); return }
         job = viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { PackStorage(getApplication()).cleanTemp(expiredOnly = true) }
-                settings = store.settings.first()
-                val saved = store.zipNaming.first()
+                val settings = store.settings.first()
+                val saved = store.outputNaming.first()
                 val naming = saved.copy(
                     base = savedState.get<String>("base") ?: saved.base,
                     appendDateTime = savedState.get<Boolean>("dateTime") ?: saved.appendDateTime,
@@ -68,8 +70,12 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
                 val format = savedState.get<String>("format")?.let { name ->
                     OutputFormat.entries.firstOrNull { it.name == name }
                 } ?: settings.format
+                val container = savedState.get<String>("container")?.let { name ->
+                    OutputContainer.entries.firstOrNull { it.name == name }
+                } ?: settings.container
                 mutable.update { it.copy(phase = SharePhase.NAMING, naming = naming,
                     resolutionMode = mode, reducedScalePercent = settings.scalePercent, format = format,
+                    container = container, pdfQuality = settings.pdfQuality,
                     scalePercentB = settings.scalePercentB,
                     targetWidth = savedState.get<String>("targetWidth") ?: settings.targetWidth.toString()) }
             } catch (e: CancellationException) { throw e }
@@ -102,10 +108,16 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
         savedState["format"] = format.name
         mutable.update { it.copy(format = format) }
     }
+    fun editContainer(container: OutputContainer) {
+        if (mutable.value.phase != SharePhase.NAMING) return
+        savedState["container"] = container.name
+        mutable.update { it.copy(container = container, error = null) }
+    }
 
     fun confirm() {
         if (mutable.value.phase != SharePhase.NAMING) return
-        val naming = try { mutable.value.naming.validated() }
+        val container = mutable.value.container
+        val naming = try { mutable.value.naming.validated(container) }
         catch (e: IllegalArgumentException) { mutable.update { it.copy(error = e.message) }; return }
         val mode = mutable.value.resolutionMode
         val format = mutable.value.format
@@ -114,13 +126,14 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
             mutable.update { it.copy(widthError = "请输入有效的正整数宽度（px）") }
             return
         }
-        fileName = naming.fileName() // Device-local time at confirmation, fixed for this request.
+        fileName = naming.fileName(container = container) // Device-local time at confirmation, fixed for this request.
         mutable.update { it.copy(phase = SharePhase.PREPARING, naming = naming, error = null) }
         job = viewModelScope.launch {
             try {
                 val latest = store.settings.first()
-                settings = latest.copy(resolutionMode = mode, format = format, targetWidth = width ?: latest.targetWidth)
-                store.saveShareOptions(naming, mode, format, width)
+                settings = latest.copy(resolutionMode = mode, format = format, targetWidth = width ?: latest.targetWidth,
+                    container = container)
+                store.saveShareOptions(naming, mode, format, width, container)
                 if (PackStorage.hasPermission(getApplication())) process()
                 else mutable.update { it.copy(phase = SharePhase.PERMISSION, askStoragePermission = true) }
             } catch (e: CancellationException) { throw e }
@@ -145,8 +158,8 @@ class ShareViewModel(application: Application, private val savedState: SavedStat
         val result = PackProcessor(getApplication()).process(inputs, settings, checkNotNull(fileName)) { done, _ ->
             mutable.update { it.copy(done = done) }
         }
-        if (result.zip == null) {
-            fail("所有图片均失败，未生成 ZIP。\n" + result.errors.joinToString("\n"))
+        if (result.output == null) {
+            fail("所有图片均失败，未生成 ${settings.container}。\n" + result.errors.joinToString("\n"))
         } else mutable.update { it.copy(phase = SharePhase.SAVED, result = result) }
     }
 

@@ -10,8 +10,8 @@ android {
         applicationId = "com.gptscreenshotpack"
         minSdk = 28
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.6.1"
+        versionCode = 8
+        versionName = "0.7.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Optional local signing; never store the keystore or passwords in the repository.
@@ -47,6 +47,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("androidx.heifwriter:heifwriter:1.1.0")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

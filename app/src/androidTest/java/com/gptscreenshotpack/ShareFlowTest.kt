@@ -13,10 +13,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.gptscreenshotpack.core.OutputContainer
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.PackSettings
 import com.gptscreenshotpack.core.ResolutionMode
-import com.gptscreenshotpack.core.ZipNaming
+import com.gptscreenshotpack.core.OutputNaming
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -37,15 +38,15 @@ class ShareFlowTest {
     private val context get() = instrumentation.targetContext
     private val store by lazy { SettingsStore(context) }
     private lateinit var previousSettings: PackSettings
-    private lateinit var previousNaming: ZipNaming
+    private lateinit var previousNaming: OutputNaming
     private val outputs = mutableListOf<PackOutput>()
     private val fixtures by lazy { File(context.cacheDir, "packs/share_${UUID.randomUUID()}").apply { check(mkdirs()) } }
 
     @Before fun setup() = runBlocking {
         previousSettings = store.settings.first()
-        previousNaming = store.zipNaming.first()
+        previousNaming = store.outputNaming.first()
         store.save(PackSettings(format = OutputFormat.PNG))
-        store.saveShareOptions(ZipNaming(), ResolutionMode.ORIGINAL, OutputFormat.HEIC)
+        store.saveShareOptions(OutputNaming(), ResolutionMode.ORIGINAL, OutputFormat.HEIC)
         if (Build.VERSION.SDK_INT == 28) {
             instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.WRITE_EXTERNAL_STORAGE}")
                 .use { ParcelFileDescriptor.AutoCloseInputStream(it).use { input -> input.readBytes() } }
@@ -55,7 +56,8 @@ class ShareFlowTest {
         outputs.forEach { context.contentResolver.delete(it.uri, null, null) }
         fixtures.deleteRecursively()
         store.save(previousSettings)
-        store.saveShareOptions(previousNaming, previousSettings.resolutionMode, previousSettings.format)
+        store.saveShareOptions(previousNaming, previousSettings.resolutionMode, previousSettings.format,
+            outputContainer = previousSettings.container)
     }
     private fun image(name: String): File = File(fixtures, name).also { file ->
         val bitmap = Bitmap.createBitmap(16, 24, Bitmap.Config.ARGB_8888)
@@ -78,6 +80,37 @@ class ShareFlowTest {
         withTimeout(30_000) { model.state.first { it.phase == phase } }
     private suspend fun awaitClosed(scenario: ActivityScenario<ShareActivity>) = withTimeout(10_000) {
         while (scenario.state != Lifecycle.State.DESTROYED) delay(25)
+    }
+
+    @Test fun pdfShareSavesAndClosesAndRemembersContainer() = runBlocking {
+        val input = image("pdf-input.png")
+        val base = "聊天_${UUID.randomUUID()}"
+        store.save(store.settings.first().copy(pdfQuality = 73))
+        ActivityScenario.launch<ShareActivity>(single(input)).use { scenario ->
+            val model = model(scenario)
+            val initial = awaitPhase(model, SharePhase.NAMING)
+            assertEquals(OutputContainer.ZIP, initial.container)
+            assertEquals(73, initial.pdfQuality)
+            scenario.onActivity {
+                model.editContainer(OutputContainer.PDF)
+                model.editName("$base.PDF")
+                model.editDateTime(false)
+            }
+            scenario.recreate()
+            assertEquals(OutputContainer.PDF, model.state.value.container)
+            scenario.onActivity { model.confirm() }
+            val saved = awaitPhase(model, SharePhase.SAVED)
+            val result = checkNotNull(saved.result)
+            val output = checkNotNull(result.output).also(outputs::add)
+            assertEquals("$base.pdf", output.name)
+            assertEquals(OutputContainer.PDF, output.container)
+            assertEquals(73, result.settings.pdfQuality)
+            awaitClosed(scenario)
+        }
+        val saved = store.settings.first()
+        assertEquals(OutputContainer.PDF, saved.container)
+        assertEquals(OutputFormat.HEIC, saved.format)
+        assertEquals(OutputNaming(base, false), store.outputNaming.first())
     }
 
     private fun assertDimensions(output: PackOutput, width: Int, height: Int) {
@@ -128,7 +161,7 @@ class ShareFlowTest {
                 assertEquals(OutputFormat.PNG, model.state.value.format)
                 scenario.onActivity { model.confirm() }
                 val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
-                val output = checkNotNull(result.zip).also(outputs::add)
+                val output = checkNotNull(result.output).also(outputs::add)
                 assertEquals("$base.zip", output.name)
                 assertEquals(PackStorage.OUTPUT_PATH, output.directory)
                 val inspect = File(fixtures, "inspect.zip")
@@ -140,18 +173,18 @@ class ShareFlowTest {
                 awaitClosed(scenario)
                 assertDimensions(output, 8, 12)
                 assertEquals(configured.copy(resolutionMode = ResolutionMode.REDUCED, format = OutputFormat.PNG), store.settings.first())
-                assertEquals(ZipNaming(base, false), store.zipNaming.first())
+                assertEquals(OutputNaming(base, false), store.outputNaming.first())
             }
             ActivityScenario.launch<ShareActivity>(single(first)).use { scenario ->
                 val model = model(scenario)
                 val next = awaitPhase(model, SharePhase.NAMING)
-                assertEquals(store.zipNaming.first(), next.naming)
+                assertEquals(store.outputNaming.first(), next.naming)
                 assertEquals(ResolutionMode.REDUCED, next.resolutionMode)
                 assertEquals(50, next.reducedScalePercent)
                 assertEquals(OutputFormat.PNG, next.format)
                 scenario.onActivity { model.editResolutionMode(ResolutionMode.ORIGINAL); model.confirm() }
                 val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
-                val output = checkNotNull(result.zip).also(outputs::add)
+                val output = checkNotNull(result.output).also(outputs::add)
                 assertDimensions(output, 16, 24) // Original ignores the saved 50% reduction ratio.
                 assertEquals(100, result.settings.effectiveScalePercent)
                 assertEquals(50, result.settings.scalePercent)
@@ -163,7 +196,7 @@ class ShareFlowTest {
                 assertEquals(OutputFormat.PNG, awaitPhase(model, SharePhase.NAMING).format)
                 scenario.onActivity { model.editFormat(OutputFormat.JPEG); model.confirm() }
                 val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
-                val output = checkNotNull(result.zip).also(outputs::add)
+                val output = checkNotNull(result.output).also(outputs::add)
                 assertEquals(OutputFormat.JPEG, result.settings.format)
                 assertEquals(90, result.settings.quality)
                 assertDimensions(output, 16, 24)
@@ -207,14 +240,14 @@ class ShareFlowTest {
 
     @Test fun secondScaleAndInlineWidthValidateRotatePersistAndProduceProportionalImages() = runBlocking {
         store.save(PackSettings(scalePercent = 50, heicQuality = 85, jpegQuality = 90, scalePercentB = 75, targetWidth = 12))
-        store.saveShareOptions(ZipNaming("width_${UUID.randomUUID()}", false), ResolutionMode.ORIGINAL, OutputFormat.PNG)
+        store.saveShareOptions(OutputNaming("width_${UUID.randomUUID()}", false), ResolutionMode.ORIGINAL, OutputFormat.PNG)
         val source = image("width.png")
         ActivityScenario.launch<ShareActivity>(single(source)).use { scenario ->
             val model = model(scenario)
             assertEquals(75, awaitPhase(model, SharePhase.NAMING).scalePercentB)
             scenario.onActivity { model.editResolutionMode(ResolutionMode.SCALE_B); model.confirm() }
             val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
-            assertDimensions(checkNotNull(result.zip).also(outputs::add), 12, 18)
+            assertDimensions(checkNotNull(result.output).also(outputs::add), 12, 18)
             awaitClosed(scenario)
         }
         ActivityScenario.launch<ShareActivity>(single(source)).use { scenario ->
@@ -234,7 +267,7 @@ class ShareFlowTest {
             assertEquals(ResolutionMode.WIDTH, model.state.value.resolutionMode)
             scenario.onActivity { model.confirm() }
             val result = checkNotNull(awaitPhase(model, SharePhase.SAVED).result)
-            assertDimensions(checkNotNull(result.zip).also(outputs::add), 20, 30)
+            assertDimensions(checkNotNull(result.output).also(outputs::add), 20, 30)
             assertEquals(20, store.settings.first().targetWidth)
             assertEquals(50, store.settings.first().scalePercent)
             assertEquals(75, store.settings.first().scalePercentB)
@@ -257,7 +290,7 @@ class ShareFlowTest {
             lateinit var mainModel: PackViewModel
             scenario.onActivity { mainModel = ViewModelProvider(it)[PackViewModel::class.java] }
             withTimeout(10_000) { mainModel.state.first { it.ready && it.settings.targetWidth == 20 } }
-            store.saveShareOptions(store.zipNaming.first(), ResolutionMode.WIDTH, OutputFormat.PNG, 10)
+            store.saveShareOptions(store.outputNaming.first(), ResolutionMode.WIDTH, OutputFormat.PNG, 10)
             withTimeout(10_000) { mainModel.state.first { it.settings.targetWidth == 10 } }
         }
     }

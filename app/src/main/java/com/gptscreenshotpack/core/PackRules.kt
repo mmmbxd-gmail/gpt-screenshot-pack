@@ -12,6 +12,10 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 enum class OutputFormat(val extension: String) { HEIC("heic"), PNG("png"), JPEG("jpg") }
+enum class OutputContainer(val extension: String, val mimeType: String) {
+    ZIP("zip", "application/zip"),
+    PDF("pdf", "application/pdf"),
+}
 // Keep REDUCED's persisted name for the existing scale A preference.
 enum class ResolutionMode { ORIGINAL, REDUCED, SCALE_B, WIDTH }
 
@@ -23,14 +27,20 @@ data class PackSettings(
     val resolutionMode: ResolutionMode = ResolutionMode.ORIGINAL,
     val scalePercentB: Int = 75,
     val targetWidth: Int = 1080,
+    val container: OutputContainer = OutputContainer.ZIP,
+    val pdfQuality: Int = 85,
 ) {
     init {
         require(scalePercent in 25..100)
         require(scalePercentB in 25..100)
         require(targetWidth > 0)
-        require(heicQuality in 1..100 && jpegQuality in 1..100)
+        require(heicQuality in 1..100 && jpegQuality in 1..100 && pdfQuality in 1..100)
     }
-    val quality: Int get() = if (format == OutputFormat.JPEG) jpegQuality else heicQuality
+    val quality: Int get() = when {
+        container == OutputContainer.PDF -> pdfQuality
+        format == OutputFormat.JPEG -> jpegQuality
+        else -> heicQuality
+    }
     // Width mode has a different effective percentage for each input image.
     val effectiveScalePercent: Int? get() = when (resolutionMode) {
         ResolutionMode.ORIGINAL -> 100
@@ -74,15 +84,22 @@ data class Tile(val left: Int, val top: Int, val right: Int, val bottom: Int) {
 object Slicing {
     const val SAFE_LIMIT = 16384
     private const val TILE_TARGET = 12000
-    fun plan(size: Dimensions): List<Tile> {
-        fun edges(length: Int): List<Int> {
-            val count = if (length <= SAFE_LIMIT) 1 else ((length.toLong() + TILE_TARGET - 1) / TILE_TARGET).toInt()
+    fun plan(size: Dimensions, maxTilePixels: Long = Long.MAX_VALUE): List<Tile> {
+        require(maxTilePixels > 0)
+        fun count(length: Int, maxEdge: Long): Int {
+            val safeCount = if (length <= SAFE_LIMIT) 1L else (length.toLong() + TILE_TARGET - 1) / TILE_TARGET
+            return maxOf(safeCount, (length - 1L) / maxEdge + 1).toInt()
+        }
+        fun edges(length: Int, count: Int): List<Int> {
             require(count <= 10000) { "图片尺寸过大" }
             return (0..count).map { (length.toLong() * it / count).toInt() }
         }
-        val xs = edges(size.width)
-        val ys = edges(size.height)
-        require((xs.size - 1).toLong() * (ys.size - 1) <= 10000) { "切片数量过多" }
+        val columns = count(size.width, maxTilePixels)
+        val widestTile = (size.width - 1L) / columns + 1
+        val rows = count(size.height, maxTilePixels / widestTile)
+        require(columns.toLong() * rows <= 10000) { "切片数量过多" }
+        val xs = edges(size.width, columns)
+        val ys = edges(size.height, rows)
         return ys.zipWithNext().flatMap { (top, bottom) ->
             xs.zipWithNext().map { (left, right) -> Tile(left, top, right, bottom) }
         }

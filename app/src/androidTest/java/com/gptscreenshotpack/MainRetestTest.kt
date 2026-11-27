@@ -40,7 +40,7 @@ class MainRetestTest {
         val context = instrumentation.targetContext
         val store = SettingsStore(context)
         val previousSettings = store.settings.first()
-        val previousNaming = store.zipNaming.first()
+        val previousNaming = store.outputNaming.first()
         val outputs = mutableListOf<PackOutput>()
         val fixtures = File(context.cacheDir, "packs/retest_${UUID.randomUUID()}").apply { check(mkdirs()) }
         val source = File(fixtures, "original.png")
@@ -64,7 +64,7 @@ class MainRetestTest {
                 scenario.onActivity { model.start(listOf(uri, uri)) }
                 var result = withTimeout(30_000) { model.state.first { !it.busy && it.result != null }.result!! }
                 assertEquals(2, model.state.value.selectedInputCount)
-                assertDimensions(checkNotNull(result.zip).also(outputs::add), fixtures, 8, 12)
+                assertDimensions(checkNotNull(result.output).also(outputs::add), fixtures, 8, 12)
 
                 scenario.recreate()
                 scenario.onActivity { assertSame(model, ViewModelProvider(it)[PackViewModel::class.java]) }
@@ -74,13 +74,13 @@ class MainRetestTest {
                 val first = result
                 result = withTimeout(30_000) { model.state.first { !it.busy && it.result != null && it.result !== first }.result!! }
                 assertEquals(ResolutionMode.SCALE_B, result.settings.resolutionMode)
-                assertDimensions(checkNotNull(result.zip).also(outputs::add), fixtures, 12, 18)
+                assertDimensions(checkNotNull(result.output).also(outputs::add), fixtures, 12, 18)
 
                 scenario.onActivity { model.setSettings(model.state.value.settings.copy(resolutionMode = ResolutionMode.WIDTH, targetWidth = 20)) }
                 compose.onNodeWithText("再次测试").performScrollTo().assertIsEnabled().performClick()
                 val second = result
                 result = withTimeout(30_000) { model.state.first { !it.busy && it.result != null && it.result !== second }.result!! }
-                assertDimensions(checkNotNull(result.zip).also(outputs::add), fixtures, 20, 30)
+                assertDimensions(checkNotNull(result.output).also(outputs::add), fixtures, 20, 30)
                 assertArrayEquals(original, source.readBytes())
                 assertEquals(3, outputs.map { it.uri }.distinct().size)
             }
@@ -88,7 +88,8 @@ class MainRetestTest {
             outputs.forEach { context.contentResolver.delete(it.uri, null, null) }
             fixtures.deleteRecursively()
             store.save(previousSettings)
-            store.saveShareOptions(previousNaming, previousSettings.resolutionMode, previousSettings.format)
+            store.saveShareOptions(previousNaming, previousSettings.resolutionMode, previousSettings.format,
+                outputContainer = previousSettings.container)
         }
     }
 

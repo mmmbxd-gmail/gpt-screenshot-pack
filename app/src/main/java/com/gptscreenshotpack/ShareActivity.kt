@@ -23,6 +23,7 @@ import androidx.core.content.IntentCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
+import com.gptscreenshotpack.core.OutputContainer
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.ResolutionMode
 
@@ -59,7 +60,7 @@ class ShareActivity : ComponentActivity() {
                     if (lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
                         if (state.phase == SharePhase.SAVED) {
                             val result = checkNotNull(state.result)
-                            val output = checkNotNull(result.zip)
+                            val output = checkNotNull(result.output)
                             val details = if (result.errors.isNotEmpty() || result.notes.isNotEmpty())
                                 "\n成功 ${result.successCount}，失败 ${result.errors.size}" +
                                     if (result.notes.any { "回退 PNG" in it }) "；部分 HEIC 已回退 PNG" else "" else ""
@@ -84,7 +85,7 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
         title = { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(when (state.phase) {
             SharePhase.NAMING -> "本次任务设置"
-            SharePhase.ERROR -> "未生成 ZIP"
+            SharePhase.ERROR -> "未生成 ${state.container}"
             SharePhase.CANCELLING -> "正在取消"
             else -> "GPT Screenshot Pack"
             }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
@@ -96,7 +97,10 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
                 if (naming) {
                     OutlinedTextField(value = state.naming.base, onValueChange = model::editName,
                         label = { Text("文件名主体") }, singleLine = true,
-                        suffix = { if (!state.naming.base.endsWith(".zip", ignoreCase = true)) Text(".zip") },
+                        suffix = {
+                            val extension = ".${state.container.extension}"
+                            if (!state.naming.base.endsWith(extension, ignoreCase = true)) Text(extension)
+                        },
                         isError = state.error != null, modifier = Modifier.fillMaxWidth())
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("自动附加日期时间", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -104,11 +108,24 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        Text("格式", style = MaterialTheme.typography.bodyMedium)
-                        listOf(OutputFormat.HEIC, OutputFormat.JPEG, OutputFormat.PNG).forEach { format ->
-                            FilterChip(selected = state.format == format, onClick = { model.editFormat(format) },
-                                label = { Text(format.name) }, modifier = Modifier.weight(1f))
+                        Text("输出方式", style = MaterialTheme.typography.bodyMedium)
+                        OutputContainer.entries.forEach { container ->
+                            FilterChip(selected = state.container == container, onClick = { model.editContainer(container) },
+                                label = { Text(container.name) }, modifier = Modifier.weight(1f))
                         }
+                    }
+                    if (state.container == OutputContainer.ZIP) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("格式", style = MaterialTheme.typography.bodyMedium)
+                            listOf(OutputFormat.HEIC, OutputFormat.JPEG, OutputFormat.PNG).forEach { format ->
+                                FilterChip(selected = state.format == format, onClick = { model.editFormat(format) },
+                                    label = { Text(format.name) }, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    } else {
+                        Text("每张图片一页 · JPEG 质量 ${state.pdfQuality}", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     ResolutionOptions(state.resolutionMode, state.reducedScalePercent, state.scalePercentB, model::editResolutionMode)
                     if (state.resolutionMode == ResolutionMode.WIDTH)
@@ -120,7 +137,7 @@ private fun ShareDialog(state: ShareUiState, model: ShareViewModel) {
                         SharePhase.LOADING -> "正在读取保存的设置…"
                         SharePhase.PREPARING -> "正在保存命名设置…"
                         SharePhase.PERMISSION -> "请允许保存到公共 Downloads"
-                        SharePhase.CANCELLING -> "正在清理本次临时文件，已保存的 ZIP 保留。"
+                        SharePhase.CANCELLING -> "正在清理本次临时文件，已保存的文件保留。"
                         else -> "正在处理 ${state.done} / ${state.inputCount}；保存完成后自动退出。"
                     })
                     if (state.phase == SharePhase.PROCESSING)

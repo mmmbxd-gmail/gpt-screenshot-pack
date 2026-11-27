@@ -3,16 +3,20 @@ package com.gptscreenshotpack
 import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.Paint
+import android.graphics.pdf.PdfRenderer
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import androidx.exifinterface.media.ExifInterface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.gptscreenshotpack.core.OutputContainer
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.PackSettings
 import com.gptscreenshotpack.core.ResolutionMode
@@ -57,11 +61,11 @@ class PackDeviceTest {
     private fun uri(file: File) = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
     private suspend fun process(files: List<File>, settings: PackSettings = PackSettings()): PackResult {
         return PackProcessor(context).process(files.map { uri(it) }, settings) { _, _ -> }.also {
-            it.zip?.let(outputs::add)
+            it.output?.let(outputs::add)
         }
     }
     private fun archive(result: PackResult): ZipFile {
-        val output = checkNotNull(result.zip) { result.errors.toString() }
+        val output = checkNotNull(result.output) { result.errors.toString() }
         val file = File(fixtures, "inspect_${UUID.randomUUID()}.zip")
         context.contentResolver.openInputStream(output.uri)!!.use { input -> file.outputStream().use { input.copyTo(it) } }
         return ZipFile(file)
@@ -140,14 +144,14 @@ class PackDeviceTest {
         val partial = process(listOf(broken, source), settings)
         assertEquals(1, partial.successCount)
         assertEquals(1, partial.errors.size)
-        assertNull(process(listOf(broken), settings).zip)
+        assertNull(process(listOf(broken), settings).output)
     }
 
     @Test fun publicPublicationTempCleanupAndCollisionKeepOutput() = runBlocking {
         val storage = PackStorage(context)
         val png = fixture("public.png")
         val result = process(listOf(png), PackSettings(format = OutputFormat.PNG))
-        val output = checkNotNull(result.zip)
+        val output = checkNotNull(result.output)
         assertEquals("Download/GPT Screenshot Pack/Output/", output.directory)
         assertTrue(output.name.startsWith("GPT_Screenshots_"))
         assertTrue(output.size > 0)
@@ -171,12 +175,147 @@ class PackDeviceTest {
         val secondRun = storage.newRun()
         val staged = storage.createTemp(secondRun, output.name, "application/zip")
         context.contentResolver.openInputStream(output.uri)!!.use { input -> storage.write(staged).use { input.copyTo(it) } }
-        val second = storage.publish(staged).also(outputs::add)
+        val second = storage.publish(staged, OutputContainer.ZIP).also(outputs::add)
         storage.cleanRun(secondRun)
         assertNotEquals(output.uri, second.uri)
         assertNotEquals(output.name, second.name)
         assertEquals(output.size, second.size)
         context.contentResolver.openInputStream(output.uri)!!.use { assertTrue(it.read() >= 0) }
+    }
+
+    @Test fun pdfUsesScaledJpegPagesInInputOrder() = runBlocking {
+        val first = colorBands("first.png", 480, 320, listOf(Color.RED, Color.TRANSPARENT))
+        val long = colorBands("long.png", 96, 28_000, listOf(Color.RED, Color.GREEN, Color.BLUE))
+        val last = colorBands("last.png", 320, 480, listOf(Color.BLUE))
+        val invalid = File(fixtures, "invalid.png").apply { writeText("broken input") }
+        val settings = PackSettings(container = OutputContainer.PDF, format = OutputFormat.PNG,
+            resolutionMode = ResolutionMode.SCALE_B, scalePercentB = 50)
+        val result = process(listOf(first, invalid, long, last), settings)
+        val output = checkNotNull(result.output) { result.errors.toString() }
+        assertEquals(3, result.successCount)
+        assertEquals(1, result.errors.size)
+        assertEquals(3, result.outputCount)
+        assertEquals("application/pdf", context.contentResolver.getType(output.uri))
+        assertEquals(PackStorage.OUTPUT_PATH, output.directory)
+        assertTrue(output.name.endsWith(".pdf"))
+        assertTrue("PDF should be much smaller than raw RGB", output.size < 250_000)
+        PdfRenderer(checkNotNull(context.contentResolver.openFileDescriptor(output.uri, "r"))).use { pdf ->
+            assertEquals(3, pdf.pageCount)
+            pdf.openPage(0).use { page ->
+                assertEquals(240, page.width)
+                assertEquals(160, page.height)
+                assertPageColors(page, listOf(Color.RED, Color.WHITE))
+            }
+            pdf.openPage(1).use { page ->
+                assertEquals(48, page.width)
+                assertEquals(14_000, page.height)
+                assertPageColors(page, listOf(Color.RED, Color.GREEN, Color.BLUE))
+            }
+            pdf.openPage(2).use { page ->
+                assertEquals(160, page.width)
+                assertEquals(240, page.height)
+                assertPageColors(page, listOf(Color.BLUE))
+            }
+        }
+        val verification = File(context.getExternalFilesDir(null), "verification").apply { mkdirs() }
+        context.contentResolver.openInputStream(output.uri)!!.use { input ->
+            File(verification, "pdf-output.pdf").outputStream().use { input.copyTo(it) }
+        }
+    }
+
+    @Test fun pdfUsesItsOwnQualityAndKeepsOnePageAfterSplitting() = runBlocking {
+        val source = colorBands("very-long.png", 96, 28_000, listOf(Color.RED, Color.GREEN, Color.BLUE), textured = true)
+        val settings = PackSettings(container = OutputContainer.PDF, jpegQuality = 100)
+        val high = checkNotNull(process(listOf(source), settings.copy(pdfQuality = 100)).output)
+        val low = checkNotNull(process(listOf(source), settings.copy(pdfQuality = 1)).output)
+        assertTrue(low.size < high.size)
+        PdfRenderer(checkNotNull(context.contentResolver.openFileDescriptor(high.uri, "r"))).use { pdf ->
+            assertEquals(1, pdf.pageCount)
+            pdf.openPage(0).use { page ->
+                assertTrue(page.height in 14_399..14_400)
+                assertEquals(49.37, page.width.toDouble(), 1.0)
+                assertPageColors(page, listOf(Color.RED, Color.GREEN, Color.BLUE))
+            }
+        }
+        assertNull(process(listOf(File(fixtures, "missing.png")), settings).output)
+    }
+
+    @Test fun jpegRegionsHandleLargeTargetsAndExifOrientation() = runBlocking {
+        val source = colorBands("screenshot.jpg", 320, 19_400, listOf(Color.RED, Color.BLUE), jpeg = true)
+        ExifInterface(source.path).apply {
+            setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_90.toString())
+            saveAttributes()
+        }
+        val settings = PackSettings(format = OutputFormat.JPEG, resolutionMode = ResolutionMode.WIDTH,
+            targetWidth = 60_000)
+        val result = process(listOf(source), settings)
+        assertEquals(result.errors.toString(), 1, result.successCount)
+        archive(result).use { zip ->
+            assertTrue(zip.size() > 3)
+            val entries = zip.entries().toList()
+            val dimensions = entries.map { entry ->
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                zip.getInputStream(entry).use { BitmapFactory.decodeStream(it, null, bounds) }
+                assertTrue(bounds.outWidth in 1..16_384 && bounds.outHeight in 1..16_384)
+                bounds.outWidth to bounds.outHeight
+            }
+            val columns = dimensions.runningFold(0) { width, tile -> width + tile.first }.indexOf(60_000)
+            assertTrue(columns > 0)
+            val rows = dimensions.chunked(columns)
+            rows.forEach { row -> assertEquals(60_000, row.sumOf { it.first }) }
+            assertEquals(990, rows.sumOf { it.first().second })
+            val first = zip.getInputStream(entries.first()).use { BitmapFactory.decodeStream(it) }
+            val last = zip.getInputStream(entries.last()).use { BitmapFactory.decodeStream(it) }
+            try {
+                assertColorNear(Color.BLUE, first.getPixel(first.width / 2, first.height / 2))
+                assertColorNear(Color.RED, last.getPixel(last.width / 2, last.height / 2))
+            } finally { first.recycle(); last.recycle() }
+        }
+    }
+
+    private fun colorBands(name: String, width: Int, height: Int, colors: List<Int>, jpeg: Boolean = false,
+        textured: Boolean = false): File {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        return try {
+            val canvas = Canvas(bitmap)
+            val paint = Paint()
+            colors.forEachIndexed { index, color ->
+                paint.color = color
+                canvas.drawRect(0f, (height * index / colors.size).toFloat(), width.toFloat(),
+                    (height * (index + 1) / colors.size).toFloat(), paint)
+            }
+            if (textured) {
+                paint.color = Color.BLACK
+                for (y in 0 until height step 5) canvas.drawRect(0f, y.toFloat(), 20f, (y + 2).toFloat(), paint)
+            }
+            File(fixtures, name).apply {
+                outputStream().use {
+                    assertTrue(bitmap.compress(if (jpeg) Bitmap.CompressFormat.JPEG else Bitmap.CompressFormat.PNG, 95, it))
+                }
+            }
+        } finally { bitmap.recycle() }
+    }
+
+    private fun assertPageColors(page: PdfRenderer.Page, colors: List<Int>) {
+        val width = 64
+        val height = 240
+        val rendered = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        try {
+            val transform = android.graphics.Matrix().apply {
+                setScale(width.toFloat() / page.width, height.toFloat() / page.height)
+            }
+            page.render(rendered, null, transform, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            colors.forEachIndexed { index, color ->
+                assertColorNear(color, rendered.getPixel(width / 2, height * (2 * index + 1) / (2 * colors.size)))
+            }
+        } finally { rendered.recycle() }
+    }
+
+    private fun assertColorNear(expected: Int, actual: Int) {
+        assertTrue("expected ${Integer.toHexString(expected)}, got ${Integer.toHexString(actual)}",
+            kotlin.math.abs(Color.red(expected) - Color.red(actual)) <= 6 &&
+                kotlin.math.abs(Color.green(expected) - Color.green(actual)) <= 6 &&
+                kotlin.math.abs(Color.blue(expected) - Color.blue(actual)) <= 6)
     }
 
     @Test fun noNetworkPermissionAndShareFilters() {

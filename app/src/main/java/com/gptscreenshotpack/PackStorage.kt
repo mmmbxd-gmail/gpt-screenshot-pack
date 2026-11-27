@@ -16,6 +16,7 @@ import android.provider.OpenableColumns
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.gptscreenshotpack.core.OutputContainer
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -24,7 +25,8 @@ import java.nio.file.Files
 import java.util.UUID
 
 data class StoredDocument(val uri: Uri, val name: String, internal val legacyFile: File? = null)
-data class PackOutput(val uri: Uri, val name: String, val size: Long, val directory: String = PackStorage.OUTPUT_PATH)
+data class PackOutput(val uri: Uri, val name: String, val size: Long, val container: OutputContainer,
+    val directory: String = PackStorage.OUTPUT_PATH)
 
 /** Public Downloads only; no absolute DATA column and no broad file-access permission on API 29+. */
 class PackStorage(private val context: Context) {
@@ -81,40 +83,42 @@ class PackStorage(private val context: Context) {
         else resolver.delete(file.uri, null, null)
     }
 
-    /** Complete ZIP is moved/published atomically; Output is never an automatic cleanup target. */
-    fun publish(zip: StoredDocument): PackOutput {
+    /** Only completed files are published; Output is never an automatic cleanup target. */
+    fun publish(staged: StoredDocument, container: OutputContainer): PackOutput {
+        val suffix = ".${container.extension}"
+        val stem = staged.name.removeSuffix(suffix)
         if (Build.VERSION.SDK_INT >= 29) {
-            val size = size(zip)
+            val size = size(staged)
             check(size > 0)
-            var desiredName = zip.name
+            var desiredName = staged.name
             var copy = 1
             while (outputNameExists(desiredName)) {
-                desiredName = "${zip.name.removeSuffix(".zip")}_copy${++copy}.zip"
+                desiredName = "${stem}_copy${++copy}$suffix"
             }
-            check(resolver.update(zip.uri, ContentValues().apply {
+            check(resolver.update(staged.uri, ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, desiredName)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, OUTPUT_PATH)
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
-            }, null, null) == 1) { "无法发布 ZIP 到公共 Output 目录" }
+            }, null, null) == 1) { "无法发布 $container 到公共 Output 目录" }
             // The provider can suffix a same-second collision; never overwrite an earlier output.
             var actualName = desiredName
-            resolver.query(zip.uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            resolver.query(staged.uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
                 if (it.moveToFirst()) actualName = it.getString(0)
             }
-            return PackOutput(zip.uri, actualName, size)
+            return PackOutput(staged.uri, actualName, size, container)
         }
-        val source = checkNotNull(zip.legacyFile)
+        val source = checkNotNull(staged.legacyFile)
         val dir = File(legacyRoot(), "Output")
         check(dir.isDirectory || dir.mkdirs()) { "无法创建公共 Output 目录" }
         val bytes = source.length()
         check(bytes > 0)
         var copy = 1
         while (true) {
-            val name = if (copy == 1) zip.name else "${zip.name.removeSuffix(".zip")}_copy$copy.zip"
+            val name = if (copy == 1) staged.name else "${stem}_copy$copy$suffix"
             val target = File(dir, name)
             try {
                 Files.move(source.toPath(), target.toPath()) // No REPLACE_EXISTING.
-                return PackOutput(legacyUri(target), target.name, bytes)
+                return PackOutput(legacyUri(target), target.name, bytes, container)
             } catch (_: FileAlreadyExistsException) { copy++ }
         }
     }
@@ -155,8 +159,8 @@ class PackStorage(private val context: Context) {
         var deleted = 0
         File(legacyRoot(), "Output").listFiles()?.forEach { file ->
             checkpoint()
-            // API 28 has no owner column; Output is the app's dedicated generated-ZIP directory.
-            if (file.isFile && file.extension == "zip" && file.delete()) deleted++
+            // API 28 has no owner column; Output is the app's dedicated generated-file directory.
+            if (file.isFile && OutputContainer.entries.any { it.extension == file.extension } && file.delete()) deleted++
         }
         return deleted
     }
@@ -168,12 +172,14 @@ class PackStorage(private val context: Context) {
         val selection = buildString {
             append("${MediaStore.MediaColumns.RELATIVE_PATH} ${if (isOutput) "= ?" else "LIKE ?"}")
             append(" AND ${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?")
-            if (isOutput) append(" AND ${MediaStore.MediaColumns.MIME_TYPE} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} GLOB ?")
+            if (isOutput) append(OutputContainer.entries.joinToString(" OR ", prefix = " AND (", postfix = ")") {
+                "(${MediaStore.MediaColumns.MIME_TYPE} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} GLOB ?)"
+            })
             if (expiredOnly) append(" AND ${MediaStore.MediaColumns.DATE_ADDED} < ?")
             if (excludedRuns.isNotEmpty()) append(" AND ${MediaStore.MediaColumns.RELATIVE_PATH} NOT IN (${excludedRuns.joinToString(",") { "?" }})")
         }
         val args = mutableListOf(if (isOutput) path else "$path%", context.packageName)
-        if (isOutput) args.addAll(listOf("application/zip", "*.zip"))
+        if (isOutput) OutputContainer.entries.forEach { args.addAll(listOf(it.mimeType, "*.${it.extension}")) }
         if (expiredOnly) args.add((System.currentTimeMillis() / 1000 - 24 * 60 * 60).toString())
         args.addAll(excludedRuns)
         val queryArgs = Bundle().apply {

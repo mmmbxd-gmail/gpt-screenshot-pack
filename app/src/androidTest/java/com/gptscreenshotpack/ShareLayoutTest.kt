@@ -12,7 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.gptscreenshotpack.core.OutputFormat
 import com.gptscreenshotpack.core.ResolutionMode
-import com.gptscreenshotpack.core.ZipNaming
+import com.gptscreenshotpack.core.OutputNaming
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -31,14 +31,14 @@ class ShareLayoutTest {
         val context = instrumentation.targetContext
         val store = SettingsStore(context)
         val settings = store.settings.first()
-        val naming = store.zipNaming.first()
+        val naming = store.outputNaming.first()
         val source = File(context.cacheDir, "packs/layout/input.png").apply { parentFile!!.mkdirs() }
         val bitmap = Bitmap.createBitmap(16, 24, Bitmap.Config.ARGB_8888)
         try { source.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
         finally { bitmap.recycle() }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", source)
         try {
-            store.saveShareOptions(ZipNaming(), ResolutionMode.ORIGINAL, OutputFormat.HEIC)
+            store.saveShareOptions(OutputNaming(), ResolutionMode.ORIGINAL, OutputFormat.HEIC)
             val intent = Intent(context, ShareActivity::class.java).apply {
                 action = Intent.ACTION_SEND
                 type = "image/png"
@@ -60,17 +60,24 @@ class ShareLayoutTest {
                 compose.onNodeWithText("指定宽度").assertIsDisplayed()
                 assertFormFits()
                 capture("share-width.png")
+                compose.onNodeWithText("PDF").performClick()
+                compose.onNodeWithText("HEIC").assertDoesNotExist()
+                compose.onNodeWithText("JPEG").assertDoesNotExist()
+                compose.onNodeWithText("PNG").assertDoesNotExist()
+                compose.onNodeWithText("每张图片一页 · JPEG 质量 ${settings.pdfQuality}").assertIsDisplayed()
+                assertFormFits(pdf = true)
                 compose.onNodeWithText("取消").performClick()
             }
         } finally {
             store.save(settings)
-            store.saveShareOptions(naming, settings.resolutionMode, settings.format)
+            store.saveShareOptions(naming, settings.resolutionMode, settings.format, outputContainer = settings.container)
             source.delete()
         }
     }
 
-    private fun assertFormFits() {
-        listOf("本次任务设置", "文件名主体", "自动附加日期时间", "HEIC", "JPEG", "PNG", "开始处理", "取消").forEach {
+    private fun assertFormFits(pdf: Boolean = false) {
+        val common = listOf("本次任务设置", "文件名主体", "自动附加日期时间", "ZIP", "PDF", "开始处理", "取消")
+        (common + if (pdf) emptyList() else listOf("HEIC", "JPEG", "PNG")).forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         val scroll = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange))

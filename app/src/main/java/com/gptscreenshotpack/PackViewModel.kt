@@ -40,9 +40,10 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.IO) { storage.cleanTemp(expiredOnly = true) }
                 val saved = store.settings.first()
                 mutable.update { it.copy(settings = saved, ready = true) }
-                // Desktop tests use the latest confirmed share task options, read-only for format.
-                store.taskOptions.collect { (mode, format, width) ->
-                    mutable.update { it.copy(settings = it.settings.copy(resolutionMode = mode, format = format, targetWidth = width)) }
+                // Main-screen tests use the latest confirmed share container and format.
+                store.taskOptions.collect { (mode, format, width, container) ->
+                    mutable.update { it.copy(settings = it.settings.copy(resolutionMode = mode, format = format,
+                        targetWidth = width, container = container)) }
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -82,7 +83,7 @@ class PackViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 mutable.update { it.copy(busy = false, result = result) }
             } catch (e: CancellationException) {
-                mutable.update { it.copy(busy = false, message = "已取消，本次未完成的临时文件已清理；已发布 ZIP 保留在 Output") }
+                mutable.update { it.copy(busy = false, message = "已取消，临时文件已清理，已保存的文件保留在 Output") }
                 throw e
             } catch (e: Exception) {
                 mutable.update { it.copy(busy = false, message = "处理失败：${e.message}") }
