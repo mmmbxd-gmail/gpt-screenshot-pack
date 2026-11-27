@@ -15,6 +15,12 @@
 
 ## Android 验证状态
 
-Android 测试 APK 已构建。新增用例覆盖 PDF 页序、等比页面、透明图背景、质量设置、分享后关闭，以及超长 JPEG 的区域解码与 EXIF 方向。云端 Android 15 软件模拟器出现系统服务重启和共享存储无法挂载。按当前验证状态，Android 端到端和 Google Drive 打开测试尚未完成。
+已在 GitHub Actions 的 Android 15 模拟器上安装 0.6.1，并成功覆盖安装 0.7.0 的签名 Release APK。[安装记录](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/actions/runs/46071323862)
+
+Android 15 模拟器的 13 项设备测试全部通过，覆盖 PDF 页序、等比页面、透明图背景、质量设置、分享后关闭、竖屏布局、ZIP 回归和 HEIC 往返。超长 JPEG 用例验证了 EXIF 方向以及 60,000 × 990 像素目标的切片。[通过的测试记录](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/actions/runs/46072510483)
+
+应用导出的三页样本大小为 8,531 字节。Android `PdfRenderer` 逐页渲染并验证颜色和顺序。模拟器上的 Google Drive PDF 阅读器打开该文件，截图像素确认第一页已渲染。[PDF 实际打开记录](https://github.com/mmmbxd-gmail/gpt-screenshot-pack/actions/runs/46072510483)
+
+设备测试的 JUnit 返回类型修正位于 `main` 的 `d19424a`，仅涉及测试文件。发行 APK 使用上文记录的应用源码版本。厂商真机上的硬件 HEIC 编码超出此次模拟器实测范围。
 
 发行附件包含签名 APK、源码 ZIP、SHA-256 校验文件。
