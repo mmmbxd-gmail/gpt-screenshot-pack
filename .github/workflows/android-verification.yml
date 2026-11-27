@@ -1,0 +1,77 @@
+name: Verify 0.7.0 on Android
+
+on:
+  push:
+    branches:
+      - codex/verify-v0.7.0-android
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Set up Android test device
+        shell: bash
+        run: |
+          test -c /dev/kvm
+          sdkmanager --install 'platforms;android-36' 'build-tools;35.0.0' 'system-images;android-35;google_apis;x86_64'
+          printf 'no\n' | avdmanager create avd --name pack35 --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
+      - name: Verify upgrade, instrumentation and Google Drive PDF rendering
+        shell: bash
+        run: |
+          mkdir -p /tmp/pack-qa
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          pack_emulator="$ANDROID_HOME/emulator/emulator"
+          pack_options=(-avd pack35 -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on)
+          adb start-server
+          if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+            "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
+          else
+            sudo -n -u "$(id -un)" -g "$(stat -c %G /dev/kvm)" --preserve-env=ANDROID_HOME,ANDROID_SDK_ROOT \
+              "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
+          fi
+          trap 'adb emu kill || true' EXIT
+          ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --console=plain
+          timeout 180 adb wait-for-device
+          timeout 180 bash -c 'until [[ $(adb shell getprop sys.boot_completed | tr -d "\r") = 1 ]]; do sleep 3; done'
+          adb shell sm list-volumes all
+          adb shell wm density 320
+          adb shell wm size 720x1520
+          adb shell wm dismiss-keyguard
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb install -r downloads/GPT-Screenshot-Pack-0.6.1.apk
+          adb install -r downloads/GPT-Screenshot-Pack-0.7.0.apk
+          adb shell dumpsys package com.gptscreenshotpack | rg 'versionCode=8|versionName=0.7.0|pkgFlags='
+          adb uninstall com.gptscreenshotpack
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+          adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb shell am instrument -w -r com.gptscreenshotpack.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/pack-qa/instrumentation.txt
+          adb pull /sdcard/Android/data/com.gptscreenshotpack/files/verification/pdf-output.pdf /tmp/pack-qa/android-export.pdf
+          pack_downloads=content://media/external_primary/downloads
+          pack_title=GPT-Screenshot-Pack-verify.pdf
+          adb shell "content insert --uri $pack_downloads --bind _display_name:s:$pack_title --bind mime_type:s:application/pdf --bind relative_path:s:Download/"
+          pack_row=$(adb shell "content query --uri $pack_downloads --projection _id --where \"_display_name='$pack_title'\"")
+          pack_id=$(printf '%s\n' "$pack_row" | sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p' | tail -1)
+          test -n "$pack_id"
+          adb shell -T "content write --uri $pack_downloads/$pack_id" < /tmp/pack-qa/android-export.pdf
+          adb shell am start -W -a android.intent.action.VIEW -d "$pack_downloads/$pack_id" -t application/pdf --grant-read-uri-permission -p com.google.android.apps.docs
+          sleep 4
+          adb shell dumpsys activity activities | rg 'topResumedActivity.*PdfViewerActivity'
+          adb exec-out screencap -p > /tmp/pack-qa/google-drive-reader.png
+          grep -q '^OK (13 tests)' /tmp/pack-qa/instrumentation.txt
+      - name: Collect test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-verification-0.7.0
+          path: /tmp/pack-qa/
+          retention-days: 14
