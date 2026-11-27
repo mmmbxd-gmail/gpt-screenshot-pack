@@ -20,14 +20,38 @@ jobs:
         shell: bash
         run: |
           test -c /dev/kvm
-          sdkmanager --install 'platforms;android-36' 'build-tools;35.0.0' 'system-images;android-35;google_apis;x86_64'
-          printf 'no\n' | avdmanager create avd --name pack35 --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
+          pack_java="${JAVA_HOME_17_X64:-}"
+          if [[ -z "$pack_java" && -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/javac" ]]; then
+            pack_java="$JAVA_HOME"
+          fi
+          if [[ -z "$pack_java" ]]; then
+            pack_java="$RUNNER_TEMP/pack-jdk17"
+            mkdir -p "$pack_java"
+            curl -fLsS --retry 2 https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse -o "$RUNNER_TEMP/jdk17.tar.gz"
+            tar -xzf "$RUNNER_TEMP/jdk17.tar.gz" -C "$pack_java" --strip-components=1
+          fi
+          export JAVA_HOME="$pack_java"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          pack_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$RUNNER_TEMP/pack-sdk}}"
+          pack_cli="$pack_sdk/cmdline-tools/latest/bin"
+          if [[ ! -x "$pack_cli/sdkmanager" ]]; then
+            mkdir -p "$pack_sdk/cmdline-tools"
+            curl -fLsS --retry 2 https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o "$RUNNER_TEMP/pack-cli.zip"
+            unzip -q "$RUNNER_TEMP/pack-cli.zip" -d "$RUNNER_TEMP/pack-cli"
+            mv "$RUNNER_TEMP/pack-cli/cmdline-tools" "$pack_sdk/cmdline-tools/latest"
+          fi
+          export ANDROID_HOME="$pack_sdk" ANDROID_SDK_ROOT="$pack_sdk"
+          set +o pipefail
+          yes | "$pack_cli/sdkmanager" --sdk_root="$pack_sdk" --licenses
+          set -o pipefail
+          "$pack_cli/sdkmanager" --sdk_root="$pack_sdk" --install emulator platform-tools 'platforms;android-36' 'build-tools;35.0.0' 'system-images;android-35;google_apis;x86_64'
+          printf 'no\n' | "$pack_cli/avdmanager" create avd --name pack35 --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
+          printf '%s\n' "JAVA_HOME=$JAVA_HOME" "ANDROID_HOME=$pack_sdk" "ANDROID_SDK_ROOT=$pack_sdk" >> "$GITHUB_ENV"
+          printf '%s\n' "$JAVA_HOME/bin" "$pack_sdk/platform-tools" >> "$GITHUB_PATH"
       - name: Verify upgrade, instrumentation and Google Drive PDF rendering
         shell: bash
         run: |
           mkdir -p /tmp/pack-qa
-          export JAVA_HOME="$JAVA_HOME_17_X64"
-          export PATH="$JAVA_HOME/bin:$PATH"
           pack_emulator="$ANDROID_HOME/emulator/emulator"
           pack_options=(-avd pack35 -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on)
           adb start-server
