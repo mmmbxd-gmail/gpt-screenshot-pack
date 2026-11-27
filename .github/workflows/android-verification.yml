@@ -41,12 +41,15 @@ jobs:
             mv "$RUNNER_TEMP/pack-cli/cmdline-tools" "$pack_sdk/cmdline-tools/latest"
           fi
           export ANDROID_HOME="$pack_sdk" ANDROID_SDK_ROOT="$pack_sdk"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/pack-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           set +o pipefail
           yes | "$pack_cli/sdkmanager" --sdk_root="$pack_sdk" --licenses
           set -o pipefail
           "$pack_cli/sdkmanager" --sdk_root="$pack_sdk" --install emulator platform-tools 'platforms;android-36' 'build-tools;35.0.0' 'system-images;android-35;google_apis;x86_64'
-          printf 'no\n' | "$pack_cli/avdmanager" create avd --name pack35 --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
-          printf '%s\n' "JAVA_HOME=$JAVA_HOME" "ANDROID_HOME=$pack_sdk" "ANDROID_SDK_ROOT=$pack_sdk" >> "$GITHUB_ENV"
+          printf 'no\n' | "$pack_cli/avdmanager" create avd --name pack35 --package 'system-images;android-35;google_apis;x86_64' --device pixel_6 --path "$ANDROID_AVD_HOME/pack35.avd"
+          test -s "$ANDROID_AVD_HOME/pack35.ini"
+          printf '%s\n' "JAVA_HOME=$JAVA_HOME" "ANDROID_HOME=$pack_sdk" "ANDROID_SDK_ROOT=$pack_sdk" "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           printf '%s\n' "$JAVA_HOME/bin" "$pack_sdk/platform-tools" >> "$GITHUB_PATH"
       - name: Verify upgrade, instrumentation and Google Drive PDF rendering
         shell: bash
@@ -61,7 +64,7 @@ jobs:
             test "$(stat -c %G /dev/kvm)" = kvm
             sudo -n /usr/sbin/usermod -aG kvm "$(id -un)"
             sg kvm -c "$(printf '%q ' "$pack_emulator" -accel-check)"
-            sg kvm -c "$(printf '%q ' "$pack_emulator" "${pack_options[@]}")" > /tmp/pack-qa/emulator.log 2>&1 &
+            sg kvm -c "$(printf '%q ' env "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" "$pack_emulator" "${pack_options[@]}")" > /tmp/pack-qa/emulator.log 2>&1 &
           else
             "$pack_emulator" -accel-check
             "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
