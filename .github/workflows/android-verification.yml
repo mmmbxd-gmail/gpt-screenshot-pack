@@ -54,16 +54,18 @@ jobs:
           mkdir -p /tmp/pack-qa
           pack_emulator="$ANDROID_HOME/emulator/emulator"
           pack_options=(-avd pack35 -no-window -no-snapshot -no-audio -no-boot-anim -no-metrics -gpu swiftshader_indirect -accel on)
-          pack_launch=()
           adb start-server
           ls -l /dev/kvm
           df -h "$RUNNER_TEMP"
           if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
-            pack_launch=(sudo -n -u "$(id -un)" -g "$(stat -c %G /dev/kvm)"
-              env "ANDROID_HOME=$ANDROID_HOME" "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT")
+            test "$(stat -c %G /dev/kvm)" = kvm
+            sudo -n /usr/sbin/usermod -aG kvm "$(id -un)"
+            sg kvm -c "$(printf '%q ' "$pack_emulator" -accel-check)"
+            sg kvm -c "$(printf '%q ' "$pack_emulator" "${pack_options[@]}")" > /tmp/pack-qa/emulator.log 2>&1 &
+          else
+            "$pack_emulator" -accel-check
+            "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
           fi
-          "${pack_launch[@]}" "$pack_emulator" -accel-check
-          "${pack_launch[@]}" "$pack_emulator" "${pack_options[@]}" > /tmp/pack-qa/emulator.log 2>&1 &
           pack_emulator_pid=$!
           trap 'cat /tmp/pack-qa/emulator.log; adb emu kill || true' EXIT
           for pack_attempt in {1..40}; do
